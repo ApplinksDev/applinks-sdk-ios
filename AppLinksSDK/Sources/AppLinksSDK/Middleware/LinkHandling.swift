@@ -1,32 +1,28 @@
 import Foundation
+import OSLog
 
-/// Protocol for handling different types of links
-public protocol LinkHandler {
-    /// Check if this handler can process the given URL
-    func canHandle(url: URL) -> Bool
-    
-    /// Handle the link and return the result
-    func handle(url: URL) async throws -> LinkHandlingResult
-    
-    /// Get the priority of this handler (higher values are tried first)
-    var priority: Int { get }
-}
 
 /// Result of link handling
 public struct LinkHandlingResult {
     public let handled: Bool
-    public let url: URL
-    public let metadata: [String: String]
+    public let originalUrl: URL
+    public let path: String
+    public let params: [String: String]
+    public let metadata: [String: Any]
     public let error: String?
     
     public init(
         handled: Bool,
-        url: URL,
-        metadata: [String: String] = [:],
+        originalUrl: URL,
+        path: String,
+        params: [String: String] = [:],
+        metadata: [String: Any] = [:],
         error: String? = nil
     ) {
         self.handled = handled
-        self.url = url
+        self.originalUrl = originalUrl
+        self.path = path
+        self.params = params
         self.metadata = metadata
         self.error = error
     }
@@ -36,7 +32,10 @@ public struct LinkHandlingResult {
 public struct LinkHandlingContext {
     public let isFirstLaunch: Bool
     public let launchTimestamp: Date
-    public let additionalData: [String: Any]
+    public var appLinksLogLevel: OSLogType
+    public var deepLinkPath: String?
+    public var deepLinkParams: [String: String]
+    public var additionalData: [String: Any]
     
     public init(
         isFirstLaunch: Bool = false,
@@ -45,6 +44,9 @@ public struct LinkHandlingContext {
     ) {
         self.isFirstLaunch = isFirstLaunch
         self.launchTimestamp = launchTimestamp
+        self.deepLinkPath = nil
+        self.deepLinkParams = [:]
         self.additionalData = additionalData
+        self.appLinksLogLevel = .info
     }
 }

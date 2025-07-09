@@ -10,7 +10,7 @@ struct AppLinksDemoApp: App {
         AppLinksSDK.initialize(
           apiKey: "pk_thund3Qt1SAqvUtJtPzFBYg7aVMJ9BPD",
           supportedDomains: ["example.onapp.link"],
-          supportedSchemes: ["applinks"]
+          supportedSchemes: ["applinks", "com.applinks.applinksdemo"]
         )
     }
     

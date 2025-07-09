@@ -168,27 +168,27 @@ final class AppLinksSDKInitializationTests: XCTestCase {
         XCTAssertNotNil(sdk)
     }
     
-    // MARK: - Custom Handlers Tests
+    // MARK: - Custom Middleware Tests
     
-    func testAddCustomHandler() {
-        let customHandler = TestCustomLinkHandler()
+    func testAddCustomMiddleware() {
+        let customMiddleware = AnyLinkMiddleware(TestCustomLinkMiddleware())
         let sdk = AppLinksSDK.initialize(
             apiKey: "pk_test_123",
             serverUrl: "https://test.com",
-            customHandlers: [customHandler]
+            customMiddleware: [customMiddleware]
         )
         
         XCTAssertNotNil(sdk)
     }
     
-    func testAddMultipleCustomHandlers() {
-        let handler1 = TestCustomLinkHandler(scheme: "test1")
-        let handler2 = TestCustomLinkHandler(scheme: "test2")
+    func testAddMultipleCustomMiddleware() {
+        let middleware1 = AnyLinkMiddleware(TestCustomLinkMiddleware(scheme: "test1"))
+        let middleware2 = AnyLinkMiddleware(TestCustomLinkMiddleware(scheme: "test2"))
         
         let sdk = AppLinksSDK.initialize(
             apiKey: "pk_test_123",
             serverUrl: "https://test.com",
-            customHandlers: [handler1, handler2]
+            customMiddleware: [middleware1, middleware2]
         )
         
         XCTAssertNotNil(sdk)
@@ -229,7 +229,7 @@ final class AppLinksSDKInitializationTests: XCTestCase {
     // MARK: - Complex Configuration Tests
     
     func testCompleteConfiguration() {
-        let customHandler = TestCustomLinkHandler()
+        let customMiddleware = AnyLinkMiddleware(TestCustomLinkMiddleware())
         
         let sdk = AppLinksSDK.initialize(
             apiKey: "pk_test_complex_config",
@@ -238,7 +238,7 @@ final class AppLinksSDKInitializationTests: XCTestCase {
             enableLogging: true,
             supportedDomains: ["app.example.com", "link.example.com", "*.wildcard.com"],
             supportedSchemes: ["myapp", "customapp"],
-            customHandlers: [customHandler]
+            customMiddleware: [customMiddleware]
         )
         
         XCTAssertNotNil(sdk)
@@ -303,23 +303,24 @@ final class AppLinksSDKInitializationTests: XCTestCase {
 
 // MARK: - Test Helper Classes
 
-class TestCustomLinkHandler: LinkHandler {
-    let priority: Int = 50
+class TestCustomLinkMiddleware: LinkMiddleware {
     private let testScheme: String
     
     init(scheme: String = "testscheme") {
         self.testScheme = scheme
     }
     
-    func canHandle(url: URL) -> Bool {
-        return url.scheme == testScheme
-    }
-    
-    func handle(url: URL) async throws -> LinkHandlingResult {
-        return LinkHandlingResult(
-            handled: true,
-            url: url,
-            metadata: ["test": "true", "scheme": testScheme]
-        )
+    func process(
+        url: URL,
+        context: LinkHandlingContext,
+        next: @escaping (URL, LinkHandlingContext) async throws -> LinkHandlingResult
+    ) async throws -> LinkHandlingResult {
+        if url.scheme == testScheme {
+            var updatedContext = context
+            updatedContext.additionalData["test"] = "true"
+            updatedContext.additionalData["scheme"] = testScheme
+            return try await next(url, updatedContext)
+        }
+        return try await next(url, context)
     }
 }

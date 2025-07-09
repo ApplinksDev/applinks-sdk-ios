@@ -64,7 +64,6 @@ The SDK follows a modular architecture with clear separation of concerns:
 1. **Main Entry Point**: `AppLinksSDK.swift`
    - Singleton pattern with forced initialization
    - Coordinates all SDK functionality
-   - Uses builder pattern for configuration via `AppLinksSDKBuilder.swift`
 
 2. **Link Handling Layer**: `/Handlers/`
    - Protocol-based design with `LinkHandler` protocol
@@ -87,7 +86,6 @@ The SDK follows a modular architecture with clear separation of concerns:
    - Tracks first launch and processed links
 
 ### Key Design Patterns
-- **Builder Pattern**: SDK initialization uses fluent interface
 - **Protocol-Oriented**: Link handlers conform to protocols for extensibility
 - **Async/Await**: Modern Swift concurrency throughout
 - **Dependency Injection**: Components receive dependencies via initializers
@@ -109,7 +107,6 @@ The SDK follows a modular architecture with clear separation of concerns:
 ### Testing Approach
 Basic test suite is now working with:
 - **BasicSDKTests.swift** - Core SDK functionality tests
-  - SDK initialization and builder pattern
   - Basic link handling flow
   - Configuration validation
 - **Status**: ✅ 4 tests passing
@@ -142,6 +139,5 @@ Basic test suite is now working with:
 3. Keep async/await pattern for consistency
 
 ### Debugging
-- Enable logging with `.enableLogging(true)` in builder
 - Check console output for link handling flow
 - Use demo app to test different link scenarios

@@ -79,19 +79,23 @@ final class BasicSDKTests: XCTestCase {
 
 // MARK: - Simple Mock for Testing
 
-class TestLinkHandler: LinkHandler {
-    var priority: Int = 50
+class TestLinkMiddleware: LinkMiddleware {
     let testScheme: String
     
     init(scheme: String) {
         self.testScheme = scheme
     }
     
-    func canHandle(url: URL) -> Bool {
-        return url.scheme == testScheme
-    }
-    
-    func handle(url: URL) async throws -> LinkHandlingResult {
-        return LinkHandlingResult(handled: true, url: url, metadata: ["test": "true"])
+    func process(
+        url: URL,
+        context: LinkHandlingContext,
+        next: @escaping (URL, LinkHandlingContext) async throws -> LinkHandlingResult
+    ) async throws -> LinkHandlingResult {
+        if url.scheme == testScheme {
+            var updatedContext = context
+            updatedContext.additionalData["test"] = "true"
+            return try await next(url, updatedContext)
+        }
+        return try await next(url, context)
     }
 }

@@ -19,15 +19,15 @@ public class AppLinksSDK {
     private let config: AppLinksConfig
     private let apiClient: AppLinksApiClient
     private let preferences: AppLinksPreferences
-    private let linkHandlingManager: LinkHandlingManager
+    private var middlewareChain: MiddlewareChain
     private let clipboardManager: ClipboardManager
-    private let customHandlers: [LinkHandler]
+    private let customMiddleware: [AnyLinkMiddleware]
     
     // MARK: - Initialization
     
-    private init(config: AppLinksConfig, customHandlers: [LinkHandler]) {
+    private init(config: AppLinksConfig, customMiddleware: [AnyLinkMiddleware]) {
         self.config = config
-        self.customHandlers = customHandlers
+        self.customMiddleware = customMiddleware
         
         // Initialize components
         self.apiClient = AppLinksApiClient(
@@ -37,14 +37,12 @@ public class AppLinksSDK {
         )
         
         self.preferences = AppLinksPreferences()
-        self.linkHandlingManager = LinkHandlingManager(config: config, enableLogging: config.enableLogging)
+        self.middlewareChain = MiddlewareChain(middlewares: [])
         self.clipboardManager = ClipboardManager(
-            apiClient: apiClient,
-            preferences: preferences,
             enableLogging: config.enableLogging
         )
         
-        setupHandlers()
+        setupMiddleware()
         checkForDeferredDeepLinkIfFirstLaunch()
     }
     
@@ -57,7 +55,7 @@ public class AppLinksSDK {
         enableLogging: Bool = true,
         supportedDomains: Set<String> = [],
         supportedSchemes: Set<String> = [],
-        customHandlers: [LinkHandler] = []
+        customMiddleware: [AnyLinkMiddleware] = []
     ) -> AppLinksSDK {
         // Validate API key format
         if apiKey.hasPrefix("sk_") {
@@ -81,14 +79,14 @@ public class AppLinksSDK {
             supportedSchemes: supportedSchemes
         )
         
-        let instance = AppLinksSDK(config: config, customHandlers: customHandlers)
+        let instance = AppLinksSDK(config: config, customMiddleware: customMiddleware)
         _instance = instance
         return instance
     }
     
     /// Initialize the SDK with a configuration object
     @discardableResult
-    public static func initialize(config: AppLinksConfig, customHandlers: [LinkHandler] = []) -> AppLinksSDK {
+    public static func initialize(config: AppLinksConfig, customMiddleware: [AnyLinkMiddleware] = []) -> AppLinksSDK {
         // Validate API key format
         if let apiKey = config.apiKey {
             if apiKey.hasPrefix("sk_") {
@@ -104,40 +102,38 @@ public class AppLinksSDK {
             return existingInstance
         }
         
-        let instance = AppLinksSDK(config: config, customHandlers: customHandlers)
+        let instance = AppLinksSDK(config: config, customMiddleware: customMiddleware)
         _instance = instance
         return instance
     }
     
     // MARK: - Setup
     
-    private func setupHandlers() {
-        // Add Universal Link Handler if domains are configured
+    private func setupMiddleware() {
+        var middlewares: [AnyLinkMiddleware] = []
+        
+        // Add Universal Link Middleware if domains are configured
         if !config.supportedDomains.isEmpty {
-            linkHandlingManager.addHandler(
-                UniversalLinkHandler(
-                    supportedDomains: config.supportedDomains,
-                    autoHandleLinks: config.autoHandleLinks,
-                    enableLogging: config.enableLogging
-                )
+            let universalLinkMiddleware = UniversalLinkMiddleware(
+                supportedDomains: config.supportedDomains,
+                apiClient: apiClient
             )
+            middlewares.append(AnyLinkMiddleware(universalLinkMiddleware))
         }
         
-        // Add Custom Scheme Handler if schemes are configured
+        // Add Custom Scheme Middleware if schemes are configured
         if !config.supportedSchemes.isEmpty {
-            linkHandlingManager.addHandler(
-                CustomSchemeHandler(
-                    supportedSchemes: config.supportedSchemes,
-                    autoHandleLinks: config.autoHandleLinks,
-                    enableLogging: config.enableLogging
-                )
+            let schemeMiddleware = SchemeMiddleware(
+                supportedSchemes: config.supportedSchemes
             )
+            middlewares.append(AnyLinkMiddleware(schemeMiddleware))
         }
         
-        // Add custom handlers provided via builder
-        customHandlers.forEach { handler in
-            linkHandlingManager.addHandler(handler)
-        }
+        // Add custom middleware provided via builder
+        middlewares.append(contentsOf: customMiddleware)
+        
+        // Update the middleware chain
+        middlewareChain = MiddlewareChain(middlewares: middlewares)
     }
     
     // MARK: - Public Methods
@@ -145,14 +141,31 @@ public class AppLinksSDK {
     /// Handle an incoming URL
     public func handleLink(
         _ url: URL,
-        onSuccess: @escaping (String, [String: String]) -> Void,
+        onSuccess: @escaping (LinkHandlingResult) -> Void,
         onError: @escaping (String) -> Void
     ) {
         Task {
             do {
-                let result = try await linkHandlingManager.handleLink(url)
+                let context = LinkHandlingContext(
+                    isFirstLaunch: preferences.isFirstLaunch,
+                    launchTimestamp: Date()
+                )
+                
+                let result = try await middlewareChain.execute(
+                    url: url,
+                    context: context
+                ) { finalUrl, finalContext in
+                    return LinkHandlingResult(
+                        handled: true,
+                        originalUrl: url,
+                        path: finalContext.deepLinkPath ?? "",
+                        params: finalContext.deepLinkParams,
+                        metadata: finalContext.additionalData
+                    )
+                }
+                
                 if result.handled {
-                    onSuccess(result.url.absoluteString, result.metadata)
+                    onSuccess(result)
                 } else {
                     onError(result.error ?? "Link not handled")
                 }
@@ -162,9 +175,10 @@ public class AppLinksSDK {
         }
     }
     
-    /// Add a custom link handler
-    public func addCustomHandler(_ handler: LinkHandler) {
-        linkHandlingManager.addHandler(handler)
+    /// Add a custom middleware
+    public func addCustomMiddleware(_ middleware: AnyLinkMiddleware) {
+        let currentMiddlewares = middlewareChain.middlewares + [middleware]
+        middlewareChain = MiddlewareChain(middlewares: currentMiddlewares)
     }
     
     // MARK: - Deferred Deep Links
@@ -186,27 +200,40 @@ public class AppLinksSDK {
     
     private func checkForDeferredDeepLink() {
         Task {
-            do {
-                let result = try await clipboardManager.retrieveDeferredDeepLink()
-                
-                // Mark first launch as completed
-                preferences.markFirstLaunchCompleted()
-                
-                if let url = result.url {
-                    if config.enableLogging {
-                        print("[AppLinksSDK] Deferred deep link retrieved: \(url)")
-                    }
-                    
-                    // Handle the retrieved link
-                    _ = try? await linkHandlingManager.handleLink(url)
-                }
-            } catch {
+            let result = await clipboardManager.retrieveDeferredDeepLink()
+            
+            // Mark first launch as completed
+            preferences.markFirstLaunchCompleted()
+            
+            if let url = result.url {
                 if config.enableLogging {
-                    print("[AppLinksSDK] No deferred deep link found: \(error)")
+                    print("[AppLinksSDK] Deferred deep link retrieved: \(url)")
                 }
                 
-                // Mark first launch as completed even if no deferred link found
-                preferences.markFirstLaunchCompleted()
+                // Handle the retrieved link through middleware
+                let context = LinkHandlingContext(
+                    isFirstLaunch: true,
+                    launchTimestamp: Date()
+                )
+                
+                let result = try await middlewareChain.execute(url: url, context: context) { finalUrl, finalContext in
+                    return LinkHandlingResult(
+                        handled: true,
+                        originalUrl: url,
+                        path: finalContext.deepLinkPath ?? "",
+                        params: finalContext.deepLinkParams,
+                        metadata: finalContext.additionalData
+                    )
+                }
+                
+                if result.handled {
+                    
+                } else {
+                }
+            } else {
+                if config.enableLogging {
+                    print("[AppLinksSDK] No deferred deep link found in clipboard")
+                }
             }
         }
     }

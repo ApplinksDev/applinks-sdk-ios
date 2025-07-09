@@ -98,15 +98,6 @@ final class AppLinksApiClientTests: XCTestCase {
     // MARK: - Error Handling Tests
     
     func testAppLinksErrorTypes() {
-        let visitProcessedError = AppLinksError.visitAlreadyProcessed
-        XCTAssertEqual(visitProcessedError.errorDescription, "Visit ID already processed")
-        
-        let noLinkDataError = AppLinksError.noLinkDataInVisit
-        XCTAssertEqual(noLinkDataError.errorDescription, "No link data found in visit")
-        
-        let linkExpiredError = AppLinksError.linkExpired
-        XCTAssertEqual(linkExpiredError.errorDescription, "Link has expired")
-        
         let invalidResponseError = AppLinksError.invalidResponse
         XCTAssertEqual(invalidResponseError.errorDescription, "Invalid server response")
         

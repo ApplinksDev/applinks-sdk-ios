@@ -11,6 +11,7 @@
 			<string>com.applinks.applinksdemo</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
+				<string>com.applinks.AppLinksDemo</string>
 				<string>applinks</string>
 			</array>
 		</dict>

@@ -3,7 +3,8 @@
     "allow": [
       "Bash(swift test)",
       "Bash(xcodebuild test:*)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "Bash(swift build)"
     ],
     "deny": []
   }

@@ -36,7 +36,7 @@ internal class AppLinksApiClient {
         
         return try await executeRequest(request, resourceType: "link")
     }
-    
+
     /// Fetch visit details by ID
     func fetchVisitDetails(visitId: String) async throws -> VisitDetailsResponse {
         if enableLogging {
@@ -49,6 +49,19 @@ internal class AppLinksApiClient {
         return try await executeRequest(request, resourceType: "visit")
     }
     
+    /// Retrieve link details by URL
+    func retrieveLink(url linkUrl: String) async throws -> LinkRetrievalResponse {
+        if enableLogging {
+            print("[AppLinksApiClient] Retrieving link with URL: \(linkUrl)")
+        }
+        
+        let url = URL(string: "\(serverUrl)/api/v1/public/links/retrieve")!
+        let requestBody = LinkRetrieveRequest(url: linkUrl)
+        let request = try buildPostRequest(url: url, body: requestBody)
+        
+        return try await executeRequest(request, resourceType: "link")
+    }
+    
     // MARK: - Private Methods
     
     private func buildRequest(url: URL) -> URLRequest {
@@ -59,6 +72,22 @@ internal class AppLinksApiClient {
         if let apiKey = apiKey {
             request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
+        
+        return request
+    }
+    
+    private func buildPostRequest<T: Encodable>(url: URL, body: T) throws -> URLRequest {
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if let apiKey = apiKey {
+            request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
+        
+        let encoder = JSONEncoder()
+        request.httpBody = try encoder.encode(body)
         
         return request
     }
@@ -79,6 +108,14 @@ internal class AppLinksApiClient {
             case 200:
                 let decoder = JSONDecoder()
                 return try decoder.decode(T.self, from: data)
+                
+            case 400:
+                // Try to parse error response for Bad Request
+                if let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
+                    throw AppLinksError.networkError(errorResponse.error.message)
+                } else {
+                    throw AppLinksError.networkError("Bad request")
+                }
                 
             case 401:
                 throw AppLinksError.networkError("Unauthorized: Invalid or missing API token")

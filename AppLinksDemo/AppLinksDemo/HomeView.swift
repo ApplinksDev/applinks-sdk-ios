@@ -81,7 +81,7 @@ struct HomeView: View {
                             
                             LinkButton(
                                 title: "Universal Link",
-                                urlString: "https://example.onapp.link/product/watch-456"
+                                urlString: "https://example.onapp.link/shoes"
                             )
                         }
                     }
