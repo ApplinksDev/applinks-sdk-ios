@@ -1,7 +1,8 @@
 import Foundation
+import Combine
 
 /// Main SDK class for AppLinks functionality
-public class AppLinksSDK {
+public class AppLinksSDK: ObservableObject {
     // MARK: - Singleton
     
     /// Shared instance of AppLinksSDK
@@ -14,6 +15,9 @@ public class AppLinksSDK {
     
     private static var _instance: AppLinksSDK?
     
+    //
+    public let linkPublisher = PassthroughSubject<LinkHandlingResult, Never>()
+    
     // MARK: - Properties
     
     private let config: AppLinksConfig
@@ -22,7 +26,8 @@ public class AppLinksSDK {
     private var middlewareChain: MiddlewareChain
     private let clipboardManager: ClipboardManager
     private let customMiddleware: [AnyLinkMiddleware]
-    
+    private let logger: AppLinksSDKLogger
+
     // MARK: - Initialization
     
     private init(config: AppLinksConfig, customMiddleware: [AnyLinkMiddleware]) {
@@ -32,15 +37,13 @@ public class AppLinksSDK {
         // Initialize components
         self.apiClient = AppLinksApiClient(
             serverUrl: config.serverUrl,
-            apiKey: config.apiKey,
-            enableLogging: config.enableLogging
+            apiKey: config.apiKey
         )
         
         self.preferences = AppLinksPreferences()
         self.middlewareChain = MiddlewareChain(middlewares: [])
-        self.clipboardManager = ClipboardManager(
-            enableLogging: config.enableLogging
-        )
+        self.clipboardManager = ClipboardManager()
+        self.logger = AppLinksSDKLogger.shared.withCategory("core")
         
         setupMiddleware()
         checkForDeferredDeepLinkIfFirstLaunch()
@@ -52,10 +55,10 @@ public class AppLinksSDK {
         apiKey: String,
         serverUrl: String = "https://applinks.com",
         autoHandleLinks: Bool = true,
-        enableLogging: Bool = true,
         supportedDomains: Set<String> = [],
         supportedSchemes: Set<String> = [],
-        customMiddleware: [AnyLinkMiddleware] = []
+        logLevel: AppLinksSDKLogLevel = .info,
+        customMiddleware: [AnyLinkMiddleware] = [],
     ) -> AppLinksSDK {
         // Validate API key format
         if apiKey.hasPrefix("sk_") {
@@ -72,35 +75,14 @@ public class AppLinksSDK {
         
         let config = AppLinksConfig(
             autoHandleLinks: autoHandleLinks,
-            enableLogging: enableLogging,
+            logLevel: logLevel,
             serverUrl: serverUrl,
             apiKey: apiKey,
             supportedDomains: supportedDomains,
             supportedSchemes: supportedSchemes
         )
         
-        let instance = AppLinksSDK(config: config, customMiddleware: customMiddleware)
-        _instance = instance
-        return instance
-    }
-    
-    /// Initialize the SDK with a configuration object
-    @discardableResult
-    public static func initialize(config: AppLinksConfig, customMiddleware: [AnyLinkMiddleware] = []) -> AppLinksSDK {
-        // Validate API key format
-        if let apiKey = config.apiKey {
-            if apiKey.hasPrefix("sk_") {
-                fatalError("Private keys (sk_*) should never be used in mobile applications. Please use a public key (pk_*) instead.")
-            }
-            if !apiKey.hasPrefix("pk_") && !apiKey.isEmpty {
-                print("[AppLinksSDK] Warning: API key should start with 'pk_' for public keys. Current key: \(apiKey.prefix(3))...")
-            }
-        }
-        
-        if let existingInstance = _instance {
-            print("[AppLinksSDK] Warning: SDK already initialized")
-            return existingInstance
-        }
+        AppLinksSDKLogger.shared.logLevel = logLevel
         
         let instance = AppLinksSDK(config: config, customMiddleware: customMiddleware)
         _instance = instance
@@ -139,11 +121,7 @@ public class AppLinksSDK {
     // MARK: - Public Methods
     
     /// Handle an incoming URL
-    public func handleLink(
-        _ url: URL,
-        onSuccess: @escaping (LinkHandlingResult) -> Void,
-        onError: @escaping (String) -> Void
-    ) {
+    public func handleLink(_ url: URL) {
         Task {
             do {
                 let context = LinkHandlingContext(
@@ -164,13 +142,19 @@ public class AppLinksSDK {
                     )
                 }
                 
-                if result.handled {
-                    onSuccess(result)
-                } else {
-                    onError(result.error ?? "Link not handled")
-                }
+                // Invoke the callback if available
+                linkPublisher.send(result)
             } catch {
-                onError(error.localizedDescription)
+                // Create error result and invoke callback
+                let errorResult = LinkHandlingResult(
+                    handled: false,
+                    originalUrl: url,
+                    path: "",
+                    params: [:],
+                    metadata: [:],
+                    error: error.localizedDescription
+                )
+                linkPublisher.send(errorResult)
             }
         }
     }
@@ -185,15 +169,11 @@ public class AppLinksSDK {
     
     private func checkForDeferredDeepLinkIfFirstLaunch() {
         guard preferences.isFirstLaunch else {
-            if config.enableLogging {
-                print("[AppLinksSDK] Skipping deferred deep link check - not first launch")
-            }
+            self.logger.debug("[AppLinksSDK] Skipping deferred deep link check - not first launch")
             return
         }
         
-        if config.enableLogging {
-            print("[AppLinksSDK] First launch detected - checking for deferred deep link")
-        }
+        self.logger.info("[AppLinksSDK] First launch detected - checking for deferred deep link")
         
         checkForDeferredDeepLink()
     }
@@ -206,34 +186,41 @@ public class AppLinksSDK {
             preferences.markFirstLaunchCompleted()
             
             if let url = result.url {
-                if config.enableLogging {
-                    print("[AppLinksSDK] Deferred deep link retrieved: \(url)")
-                }
+                self.logger.info("[AppLinksSDK] Deferred deep link retrieved: \(url)")
                 
-                // Handle the retrieved link through middleware
-                let context = LinkHandlingContext(
-                    isFirstLaunch: true,
-                    launchTimestamp: Date()
-                )
-                
-                let result = try await middlewareChain.execute(url: url, context: context) { finalUrl, finalContext in
-                    return LinkHandlingResult(
-                        handled: true,
-                        originalUrl: url,
-                        path: finalContext.deepLinkPath ?? "",
-                        params: finalContext.deepLinkParams,
-                        metadata: finalContext.additionalData
+                do {
+                    // Handle the retrieved link through middleware
+                    let context = LinkHandlingContext(
+                        isFirstLaunch: true,
+                        launchTimestamp: Date()
                     )
-                }
-                
-                if result.handled {
                     
-                } else {
+                    let result = try await middlewareChain.execute(url: url, context: context) { finalUrl, finalContext in
+                        return LinkHandlingResult(
+                            handled: true,
+                            originalUrl: url,
+                            path: finalContext.deepLinkPath ?? "",
+                            params: finalContext.deepLinkParams,
+                            metadata: finalContext.additionalData
+                        )
+                    }
+                    
+                    // Invoke the callback for deferred deep link
+                    linkPublisher.send(result)
+                } catch {
+                    // Create error result and invoke callback
+                    let errorResult = LinkHandlingResult(
+                        handled: false,
+                        originalUrl: url,
+                        path: "",
+                        params: [:],
+                        metadata: [:],
+                        error: error.localizedDescription
+                    )
+                    linkPublisher.send(errorResult)
                 }
             } else {
-                if config.enableLogging {
-                    print("[AppLinksSDK] No deferred deep link found in clipboard")
-                }
+                self.logger.debug("[AppLinksSDK] No deferred deep link found in clipboard")
             }
         }
     }

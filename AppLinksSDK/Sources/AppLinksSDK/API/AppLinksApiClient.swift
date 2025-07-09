@@ -4,17 +4,16 @@ import Foundation
 internal class AppLinksApiClient {
     private let serverUrl: String
     private let apiKey: String?
-    private let enableLogging: Bool
     private let session: URLSession
+    private let logger = AppLinksSDKLogger.shared.withCategory("api-client")
     
     // Timeouts
     private let connectTimeout: TimeInterval = 10.0
     private let readTimeout: TimeInterval = 10.0
     
-    init(serverUrl: String, apiKey: String?, enableLogging: Bool) {
+    init(serverUrl: String, apiKey: String?) {
         self.serverUrl = serverUrl
         self.apiKey = apiKey
-        self.enableLogging = enableLogging
         
         // Configure URLSession
         let config = URLSessionConfiguration.default
@@ -27,9 +26,7 @@ internal class AppLinksApiClient {
     
     /// Fetch link details by ID
     func fetchLink(linkId: String) async throws -> LinkResponse {
-        if enableLogging {
-            print("[AppLinksApiClient] Fetching link with ID: \(linkId)")
-        }
+        logger.debug("[AppLinksSDK] Fetching link with ID: \(linkId)")
         
         let url = URL(string: "\(serverUrl)/api/v1/links/\(linkId)")!
         let request = buildRequest(url: url)
@@ -39,9 +36,7 @@ internal class AppLinksApiClient {
 
     /// Fetch visit details by ID
     func fetchVisitDetails(visitId: String) async throws -> VisitDetailsResponse {
-        if enableLogging {
-            print("[AppLinksApiClient] Fetching visit details with ID: \(visitId)")
-        }
+        logger.debug("[AppLinksSDK] Fetching visit details with ID: \(visitId)")
         
         let url = URL(string: "\(serverUrl)/api/v1/visits/\(visitId)/details")!
         let request = buildRequest(url: url)
@@ -51,9 +46,7 @@ internal class AppLinksApiClient {
     
     /// Retrieve link details by URL
     func retrieveLink(url linkUrl: String) async throws -> LinkRetrievalResponse {
-        if enableLogging {
-            print("[AppLinksApiClient] Retrieving link with URL: \(linkUrl)")
-        }
+        logger.debug("[AppLinksSDK] Retrieving link with URL: \(linkUrl)")
         
         let url = URL(string: "\(serverUrl)/api/v1/public/links/retrieve")!
         let requestBody = LinkRetrieveRequest(url: linkUrl)
@@ -100,9 +93,7 @@ internal class AppLinksApiClient {
                 throw AppLinksError.invalidResponse
             }
             
-            if enableLogging {
-                print("[AppLinksApiClient] Response code: \(httpResponse.statusCode)")
-            }
+            logger.debug("[AppLinksSDK] Response code: \(httpResponse.statusCode)")
             
             switch httpResponse.statusCode {
             case 200:
@@ -138,9 +129,7 @@ internal class AppLinksApiClient {
         } catch let error as AppLinksError {
             throw error
         } catch {
-            if enableLogging {
-                print("[AppLinksApiClient] Network error: \(error)")
-            }
+            logger.debug("[AppLinksSDK] Network error: \(error)")
             throw AppLinksError.networkError(error.localizedDescription)
         }
     }

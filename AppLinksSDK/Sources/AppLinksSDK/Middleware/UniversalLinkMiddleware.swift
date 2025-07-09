@@ -27,7 +27,7 @@ internal class UniversalLinkMiddleware: LinkMiddleware {
         next: @escaping (URL, LinkHandlingContext) async throws -> LinkHandlingResult
     ) async throws -> LinkHandlingResult {
         if (!canHandle(url: url)) {
-            logger.log(level: .debug, "[UniversalLinkHandler] Cannot handle URL: \(url)")
+            logger.log(level: .debug, "[AppLinksSDK] Cannot handle URL: \(url)")
             return try await next(url, context)
         }
         
@@ -39,11 +39,11 @@ internal class UniversalLinkMiddleware: LinkMiddleware {
             updatedContext.deepLinkParams = linkRetrievalResponse.link.deepLinkParams
             updatedContext.additionalData["visitId"] = linkRetrievalResponse.visitId
             
-            logger.log(level: context.appLinksLogLevel, "[UniversalLinkHandler] Retrieved link: \(url)")
+            logger.log(level: .debug, "[AppLinksSDK] Retrieved link: \(url)")
             
             return try await next(url, updatedContext)
         } catch {
-            logger.log(level: .debug, "[UniversalLinkHandler] Failed to retrieve link: \(error)")
+            logger.log(level: .debug, "[AppLinksSDK] Failed to retrieve link: \(error)")
             return try await next(url, context)
         }
     }

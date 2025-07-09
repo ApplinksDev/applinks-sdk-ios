@@ -10,7 +10,7 @@ import OSLog
 
 internal class SchemeMiddleware: LinkMiddleware {
     private var supportedSchemes: Set<String> = []
-    private let logger = Logger(subsystem: "com.applinks.sdk", category: "SchemeMiddleware")
+    private let logger = AppLinksSDKLogger.shared.withCategory("scheme-middleware")
 
     internal init(
         supportedSchemes: Set<String> = []
@@ -24,7 +24,7 @@ internal class SchemeMiddleware: LinkMiddleware {
         next: @escaping (URL, LinkHandlingContext) async throws -> LinkHandlingResult
     ) async throws -> LinkHandlingResult {
         if (!canHandle(url: url)) {
-            logger.log(level: .debug, "[SchemeMiddleware] Cannot handle URL: \(url)")
+            logger.debug("[AppLinksSDK] Cannot handle URL: \(url)")
             return try await next(url, context)
         }
         
@@ -70,7 +70,7 @@ internal class SchemeMiddleware: LinkMiddleware {
             }
         }
         
-        logger.log(level: context.appLinksLogLevel, "[SchemeMiddleware] Parsed scheme URL: \(url)")
+        logger.debug("[AppLinksSDK] Parsed scheme URL: \(url)")
         
         return try await next(url, updatedContext)
     }

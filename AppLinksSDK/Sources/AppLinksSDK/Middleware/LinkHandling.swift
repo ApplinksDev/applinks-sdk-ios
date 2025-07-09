@@ -32,7 +32,6 @@ public struct LinkHandlingResult {
 public struct LinkHandlingContext {
     public let isFirstLaunch: Bool
     public let launchTimestamp: Date
-    public var appLinksLogLevel: OSLogType
     public var deepLinkPath: String?
     public var deepLinkParams: [String: String]
     public var additionalData: [String: Any]
@@ -47,6 +46,5 @@ public struct LinkHandlingContext {
         self.deepLinkPath = nil
         self.deepLinkParams = [:]
         self.additionalData = additionalData
-        self.appLinksLogLevel = .info
     }
 }

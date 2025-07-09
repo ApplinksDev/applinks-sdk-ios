@@ -4,14 +4,18 @@ import AppLinksSDK
 @main
 struct AppLinksDemoApp: App {
     @StateObject private var navigationState = NavigationState()
+    @StateObject private var applinksSDK: AppLinksSDK
     
     init() {
-        // Initialize AppLinks SDK
+        // Initialize AppLinks SDK without callback first
         AppLinksSDK.initialize(
-          apiKey: "pk_thund3Qt1SAqvUtJtPzFBYg7aVMJ9BPD",
-          supportedDomains: ["example.onapp.link"],
-          supportedSchemes: ["applinks", "com.applinks.applinksdemo"]
+            apiKey: "pk_thund3Qt1SAqvUtJtPzFBYg7aVMJ9BPD",
+            supportedDomains: ["example.onapp.link"],
+            supportedSchemes: ["applinks", "com.applinks.applinksdemo"],
+            logLevel: .debug
         )
+        
+        _applinksSDK = StateObject(wrappedValue: AppLinksSDK.shared)
     }
     
     var body: some Scene {
@@ -19,38 +23,27 @@ struct AppLinksDemoApp: App {
             ContentView()
                 .environmentObject(navigationState)
                 .onOpenURL { url in
-                    handleIncomingURL(url)
+                    AppLinksSDK.shared.handleLink(url)
                 }
-                .onAppear {
-                    setupNotifications()
-                }
+                .onReceive(applinksSDK.linkPublisher, perform: { linkResult in
+                    if (linkResult.handled) {
+                        navigateFromPath(linkResult.path, metadata: linkResult.metadata)
+                    }
+                })
         }
     }
     
-    private func handleIncomingURL(_ url: URL) {
-        print("App received URL: \(url)")
+    private func navigateFromPath(_ path: String, metadata: [String: Any]) {
+        let pathComponents = path
+            .split(separator: "/")
+            .map { String($0).lowercased() }
         
-        AppLinksSDK.shared.handleLink(url) { link, metadata in
-            print("Successfully handled link: \(link)")
-            print("Metadata: \(metadata)")
-            
-            // Navigate based on the URL
-            navigateFromURL(url, metadata: metadata)
-        } onError: { error in
-            print("Failed to handle link: \(error)")
-        }
-    }
-    
-    private func navigateFromURL(_ url: URL, metadata: [String: String]) {
-        // Parse URL and navigate accordingly
-        let pathComponents = url.pathComponents.filter { $0 != "/" }
-        
-        if pathComponents.isEmpty {
+        guard let firstComponent = pathComponents.first else {
             navigationState.selectedTab = .home
             return
         }
         
-        switch pathComponents[0].lowercased() {
+        switch firstComponent {
         case "product":
             navigationState.selectedTab = .product
             if pathComponents.count > 1 {
@@ -67,21 +60,6 @@ struct AppLinksDemoApp: App {
             navigationState.selectedTab = .home
         }
     }
-    
-    private func setupNotifications() {
-        // Listen for custom scheme notifications from SDK
-        NotificationCenter.default.addObserver(
-            forName: Notification.Name("AppLinksCustomSchemeHandled"),
-            object: nil,
-            queue: .main
-        ) { notification in
-            if let userInfo = notification.userInfo,
-               let url = userInfo["url"] as? URL,
-               let metadata = userInfo["metadata"] as? [String: String] {
-                navigateFromURL(url, metadata: metadata)
-            }
-        }
-    }
 }
 
 // Navigation state for the app
@@ -94,5 +72,36 @@ class NavigationState: ObservableObject {
         case home
         case product
         case promo
+    }
+    
+    static let shared = NavigationState()
+    
+    func handleLinkResult(_ result: LinkHandlingResult) {
+        guard result.handled else { return }
+        
+        let url = result.originalUrl
+        let pathComponents = url.pathComponents.filter { $0 != "/" }
+        
+        if pathComponents.isEmpty {
+            selectedTab = .home
+            return
+        }
+        
+        switch pathComponents[0].lowercased() {
+        case "product":
+            selectedTab = .product
+            if pathComponents.count > 1 {
+                productId = pathComponents[1]
+            }
+            
+        case "promo":
+            selectedTab = .promo
+            if pathComponents.count > 1 {
+                promoCode = pathComponents[1]
+            }
+            
+        default:
+            selectedTab = .home
+        }
     }
 }

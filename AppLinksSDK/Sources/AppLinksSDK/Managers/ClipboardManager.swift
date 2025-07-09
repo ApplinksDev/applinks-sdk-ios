@@ -19,11 +19,10 @@ internal struct ClipboardResult {
 
 /// Manages clipboard-based deferred deep links
 internal class ClipboardManager {
-    private let enableLogging: Bool
+    private let logger = AppLinksSDKLogger.shared.withCategory("clipboard-manager")
     private var pasteBoard: MockablePasteboard
 
-    init(enableLogging: Bool, pasteboard: MockablePasteboard = UIPasteboard.general) {
-        self.enableLogging = enableLogging
+    init(pasteboard: MockablePasteboard = UIPasteboard.general) {
         self.pasteBoard = pasteboard
     }
 
@@ -31,9 +30,7 @@ internal class ClipboardManager {
     func retrieveDeferredDeepLink() async -> ClipboardResult {
         // First check if clipboard has URLs (doesn't trigger permission)
         guard hasUrlOnClipboard() else {
-            if enableLogging {
-                print("[ClipboardManager] No URL detected in clipboard")
-            }
+            logger.debug("[AppLinksSDK] No URL detected in clipboard")
             return ClipboardResult(url: nil)
         }
 
@@ -41,23 +38,17 @@ internal class ClipboardManager {
         guard let clipboardContent = pasteBoard.string,
             !clipboardContent.isEmpty
         else {
-            if enableLogging {
-                print("[ClipboardManager] No content in clipboard")
-            }
+            logger.debug("[AppLinksSDK] No content in clipboard")
             return ClipboardResult(url: nil)
         }
 
         // Try to parse as URL
         guard let url = URL(string: clipboardContent.trimmingCharacters(in: .whitespaces)) else {
-            if enableLogging {
-                print("[ClipboardManager] Clipboard content is not a valid URL")
-            }
+            logger.debug("[AppLinksSDK] Clipboard content is not a valid URL")
             return ClipboardResult(url: nil)
         }
 
-        if enableLogging {
-            print("[ClipboardManager] Found URL in clipboard: \(url)")
-        }
+        logger.info("[AppLinksSDK] Found URL in clipboard: \(url)")
 
         // Clear clipboard to prevent re-processing
         clearClipboard()
@@ -69,9 +60,7 @@ internal class ClipboardManager {
 
     private func clearClipboard() {
         pasteBoard.string = ""
-        if enableLogging {
-            print("[ClipboardManager] Cleared clipboard content")
-        }
+        logger.debug("[AppLinksSDK] Cleared clipboard content")
     }
 
     private func hasUrlOnClipboard() -> Bool {

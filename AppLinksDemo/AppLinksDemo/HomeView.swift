@@ -38,19 +38,19 @@ struct HomeView: View {
                         VStack(spacing: 10) {
                             ClipboardButton(
                                 title: "Product Link",
-                                content: "applinks://visit/550e8400-e29b-41d4-a716-446655440000",
+                                content: "applinks://product/shoes-123",
                                 description: "Opens product detail page"
                             )
                             
                             ClipboardButton(
                                 title: "Promo Link",
-                                content: "applinks://visit/6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+                                content: "applinks://promo/SUMMER2024",
                                 description: "Opens promo page with code"
                             )
                             
                             ClipboardButton(
                                 title: "Home Link",
-                                content: "applinks://visit/6ba7b811-9dad-11d1-80b4-00c04fd430c8",
+                                content: "applinks://home",
                                 description: "Opens home page"
                             )
                         }
@@ -71,7 +71,7 @@ struct HomeView: View {
                         VStack(spacing: 10) {
                             LinkButton(
                                 title: "Product Page",
-                                urlString: "applinks://product/shoes-123"
+                                urlString: "https://example.onapp.link/shoes"
                             )
                             
                             LinkButton(

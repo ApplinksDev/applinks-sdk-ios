@@ -3,13 +3,7 @@ import OSLog
 
 /// Middleware that logs link handling events
 public class LoggingMiddleware: LinkMiddleware {
-    private let logger: Logger
-    private let logLevel: OSLogType
-    
-    public init(subsystem: String = "com.applinks.sdk", category: String = "LinkHandling", logLevel: OSLogType = .info) {
-        self.logger = Logger(subsystem: subsystem, category: category)
-        self.logLevel = logLevel
-    }
+    private let logger = AppLinksSDKLogger.shared.withCategory("logging-middleware")
     
     public func process(
         url: URL,
@@ -17,30 +11,27 @@ public class LoggingMiddleware: LinkMiddleware {
         next: @escaping (URL, LinkHandlingContext) async throws -> LinkHandlingResult
     ) async throws -> LinkHandlingResult {
         let startTime = Date()
-        
-        var updatedContext = context
-        updatedContext.appLinksLogLevel = logLevel
-        
-        logger.log(level: logLevel, "Starting link processing: \(url.absoluteString, privacy: .public)")
-        logger.log(level: .debug, "Context: isFirstLaunch=\(context.isFirstLaunch), timestamp=\(context.launchTimestamp)")
+                
+        logger.debug("[AppLinksSDK] Starting link processing: \(url.absoluteString)")
+        logger.debug("[AppLinksSDK] Context: isFirstLaunch=\(context.isFirstLaunch), timestamp=\(context.launchTimestamp)")
         
         do {
-            let result = try await next(url, updatedContext)
+            let result = try await next(url, context)
             let duration = Date().timeIntervalSince(startTime)
             
             if result.handled {
-                logger.log(level: logLevel, "Link handled successfully: \(url.absoluteString, privacy: .public) in \(duration)s")
+                logger.debug("[AppLinksSDK] Link handled successfully: \(url.absoluteString) in \(duration)s")
                 if !result.metadata.isEmpty {
-                    logger.log(level: .debug, "Metadata: \(result.metadata)")
+                    logger.debug("[AppLinksSDK] Metadata: \(result.metadata)")
                 }
             } else {
-                logger.log(level: logLevel, "Link not handled: \(url.absoluteString, privacy: .public)")
+                logger.debug("[AppLinksSDK] Link not handled: \(url.absoluteString)")
             }
             
             return result
         } catch {
             let duration = Date().timeIntervalSince(startTime)
-            logger.log(level: .error, "Link handling failed: \(url.absoluteString, privacy: .public) after \(duration)s - Error: \(error.localizedDescription)")
+            logger.error("[AppLinksSDK] Link handling failed: \(url.absoluteString) after \(duration)s - Error: \(error.localizedDescription)")
             throw error
         }
     }

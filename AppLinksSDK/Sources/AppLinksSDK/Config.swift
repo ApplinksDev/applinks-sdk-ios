@@ -5,8 +5,8 @@ public struct AppLinksConfig {
     /// Enable automatic link handling
     public let autoHandleLinks: Bool
     
-    /// Enable debug logging
-    public let enableLogging: Bool
+    /// Logging level throughout the SDK
+    public let logLevel: AppLinksSDKLogLevel
     
     /// AppLinks server URL
     public let serverUrl: String
@@ -23,14 +23,14 @@ public struct AppLinksConfig {
     /// Default configuration
     public init(
         autoHandleLinks: Bool = true,
-        enableLogging: Bool = true,
+        logLevel: AppLinksSDKLogLevel = .info,
         serverUrl: String = "https://applinks.com",
         apiKey: String? = nil,
         supportedDomains: Set<String> = [],
         supportedSchemes: Set<String> = []
     ) {
         self.autoHandleLinks = autoHandleLinks
-        self.enableLogging = enableLogging
+        self.logLevel = logLevel
         self.serverUrl = serverUrl
         self.apiKey = apiKey
         self.supportedDomains = supportedDomains
