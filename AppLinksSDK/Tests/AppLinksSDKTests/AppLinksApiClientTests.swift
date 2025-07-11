@@ -13,7 +13,7 @@ final class AppLinksApiClientTests: XCTestCase {
     override func setUp() {
         super.setUp()
         mockSession = MockURLSession()
-        apiClient = AppLinksApiClient(serverUrl: "https://api.test.com", apiKey: "test_key", enableLogging: false)
+        apiClient = AppLinksApiClient(serverUrl: "https://api.test.com", apiKey: "test_key")
         // Note: In a real implementation, we'd need dependency injection for URLSession
     }
     
@@ -26,12 +26,12 @@ final class AppLinksApiClientTests: XCTestCase {
     // MARK: - Initialization Tests
     
     func testInitialization() {
-        let client = AppLinksApiClient(serverUrl: "https://api.example.com", apiKey: "key123", enableLogging: true)
+        let client = AppLinksApiClient(serverUrl: "https://api.example.com", apiKey: "key123")
         XCTAssertNotNil(client)
     }
     
     func testInitializationWithoutApiKey() {
-        let client = AppLinksApiClient(serverUrl: "https://api.example.com", apiKey: nil, enableLogging: false)
+        let client = AppLinksApiClient(serverUrl: "https://api.example.com", apiKey: nil)
         XCTAssertNotNil(client)
     }
     

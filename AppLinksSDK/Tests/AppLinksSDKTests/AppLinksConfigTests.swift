@@ -9,7 +9,6 @@ final class AppLinksConfigTests: XCTestCase {
         let config = AppLinksConfig()
         
         XCTAssertTrue(config.autoHandleLinks)
-        XCTAssertTrue(config.enableLogging)
         XCTAssertEqual(config.serverUrl, "https://applinks.com")
         XCTAssertNil(config.apiKey)
         XCTAssertTrue(config.supportedDomains.isEmpty)
@@ -24,7 +23,6 @@ final class AppLinksConfigTests: XCTestCase {
         
         let config = AppLinksConfig(
             autoHandleLinks: false,
-            enableLogging: false,
             serverUrl: "https://custom-server.com",
             apiKey: "pk_test_123456",
             supportedDomains: domains,
@@ -32,7 +30,6 @@ final class AppLinksConfigTests: XCTestCase {
         )
         
         XCTAssertFalse(config.autoHandleLinks)
-        XCTAssertFalse(config.enableLogging)
         XCTAssertEqual(config.serverUrl, "https://custom-server.com")
         XCTAssertEqual(config.apiKey, "pk_test_123456")
         XCTAssertEqual(config.supportedDomains, domains)
@@ -47,7 +44,6 @@ final class AppLinksConfigTests: XCTestCase {
         
         // Should use defaults for unspecified values
         XCTAssertTrue(config.autoHandleLinks)
-        XCTAssertTrue(config.enableLogging)
         XCTAssertEqual(config.serverUrl, "https://partial-config.com")
         XCTAssertEqual(config.apiKey, "pk_partial_123")
         XCTAssertTrue(config.supportedDomains.isEmpty)
@@ -175,23 +171,12 @@ final class AppLinksConfigTests: XCTestCase {
         let config = AppLinksConfig(autoHandleLinks: false)
         XCTAssertFalse(config.autoHandleLinks)
     }
-    
-    func testEnableLoggingTrue() {
-        let config = AppLinksConfig(enableLogging: true)
-        XCTAssertTrue(config.enableLogging)
-    }
-    
-    func testEnableLoggingFalse() {
-        let config = AppLinksConfig(enableLogging: false)
-        XCTAssertFalse(config.enableLogging)
-    }
-    
+
     // MARK: - Complex Configuration Tests
     
     func testProductionConfiguration() {
         let config = AppLinksConfig(
             autoHandleLinks: true,
-            enableLogging: false,
             serverUrl: "https://api.applinks.com",
             apiKey: "pk_live_production_key",
             supportedDomains: ["myapp.com", "*.myapp.com"],
@@ -199,7 +184,6 @@ final class AppLinksConfigTests: XCTestCase {
         )
         
         XCTAssertTrue(config.autoHandleLinks)
-        XCTAssertFalse(config.enableLogging)
         XCTAssertEqual(config.serverUrl, "https://api.applinks.com")
         XCTAssertEqual(config.apiKey, "pk_live_production_key")
         XCTAssertTrue(config.supportedDomains.contains("myapp.com"))
@@ -210,7 +194,6 @@ final class AppLinksConfigTests: XCTestCase {
     func testDevelopmentConfiguration() {
         let config = AppLinksConfig(
             autoHandleLinks: true,
-            enableLogging: true,
             serverUrl: "https://staging-api.applinks.com",
             apiKey: "pk_test_development_key",
             supportedDomains: ["staging.myapp.com", "dev.myapp.com"],
@@ -218,7 +201,6 @@ final class AppLinksConfigTests: XCTestCase {
         )
         
         XCTAssertTrue(config.autoHandleLinks)
-        XCTAssertTrue(config.enableLogging)
         XCTAssertEqual(config.serverUrl, "https://staging-api.applinks.com")
         XCTAssertEqual(config.apiKey, "pk_test_development_key")
         XCTAssertEqual(config.supportedDomains.count, 2)

@@ -127,6 +127,23 @@ Add your URL schemes:
 
 ## Advanced Usage
 
+### SDK Version Information
+
+You can access the SDK version at runtime:
+
+```swift
+// Get current version
+let version = AppLinksSDK.version // "1.0.0"
+
+// Get full version info
+let versionInfo = AppLinksSDK.versionInfo
+// ["name": "AppLinksSDK", "version": "1.0.0", "platform": "iOS", "platformVersion": "..."]
+
+// Version is also included in all HTTP requests as headers:
+// User-Agent: AppLinksSDK/1.0.0 (iOS/17.0.0)
+// X-AppLinks-SDK-Version: 1.0.0
+```
+
 ### Custom Link Handlers
 
 ```swift

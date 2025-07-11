@@ -25,7 +25,7 @@ final class ClipboardManagerTests: XCTestCase {
     override func setUp() {
         super.setUp()
         mockPasteboard = MockPasteboard()
-        clipboardManager = ClipboardManager(enableLogging: false, pasteboard: mockPasteboard)
+        clipboardManager = ClipboardManager(pasteboard: mockPasteboard)
     }
     
     override func tearDown() {

@@ -61,6 +61,8 @@ internal class AppLinksApiClient {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.addValue("application/json", forHTTPHeaderField: "Accept")
+        request.addValue(AppLinksSDKVersion.userAgent, forHTTPHeaderField: "User-Agent")
+        request.addValue(AppLinksSDKVersion.current, forHTTPHeaderField: "X-AppLinks-SDK-Version")
         
         if let apiKey = apiKey {
             request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
@@ -74,6 +76,8 @@ internal class AppLinksApiClient {
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue(AppLinksSDKVersion.userAgent, forHTTPHeaderField: "User-Agent")
+        request.addValue(AppLinksSDKVersion.current, forHTTPHeaderField: "X-AppLinks-SDK-Version")
         
         if let apiKey = apiKey {
             request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")

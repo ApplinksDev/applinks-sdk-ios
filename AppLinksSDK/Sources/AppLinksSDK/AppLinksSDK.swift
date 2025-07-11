@@ -86,13 +86,17 @@ public class AppLinksSDK: ObservableObject {
         
         let instance = AppLinksSDK(config: config, customMiddleware: customMiddleware)
         _instance = instance
+        
+        // Log SDK initialization
+        instance.logger.info("[AppLinksSDK] Initialized \(AppLinksSDKVersion.fullName)")
+        
         return instance
     }
     
     // MARK: - Setup
     
     private func setupMiddleware() {
-        var middlewares: [AnyLinkMiddleware] = []
+        var middlewares: [AnyLinkMiddleware] = [AnyLinkMiddleware(LoggingMiddleware())]
         
         // Add Universal Link Middleware if domains are configured
         if !config.supportedDomains.isEmpty {
@@ -163,6 +167,16 @@ public class AppLinksSDK: ObservableObject {
     public func addCustomMiddleware(_ middleware: AnyLinkMiddleware) {
         let currentMiddlewares = middlewareChain.middlewares + [middleware]
         middlewareChain = MiddlewareChain(middlewares: currentMiddlewares)
+    }
+    
+    /// Get SDK version information
+    public static var version: String {
+        return AppLinksSDKVersion.current
+    }
+    
+    /// Get full SDK version information including name
+    public static var versionInfo: [String: String] {
+        return AppLinksSDKVersion.asDictionary
     }
     
     // MARK: - Deferred Deep Links
