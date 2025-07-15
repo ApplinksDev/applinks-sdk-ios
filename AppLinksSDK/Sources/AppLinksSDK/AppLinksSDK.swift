@@ -272,18 +272,25 @@ public class AppLinksSDK: ObservableObject {
         subscriberCount += 1
         
         // Send all pending links to the first subscriber only
+        // We use async to ensure the subscription is fully established
         if subscriberCount == 1 && !pendingLinks.isEmpty {
-            for pendingLink in pendingLinks {
-                _linkPublisher.send(pendingLink)
-            }
-            logger.info("[AppLinksSDK] Delivered \(pendingLinks.count) queued link(s) to first subscriber")
+            let linksToSend = pendingLinks
             pendingLinks.removeAll()
+            
+            DispatchQueue.main.async { [weak self] in
+                guard let self: AppLinksSDK = self else { return }
+                for pendingLink in linksToSend {
+                    self._linkPublisher.send(pendingLink)
+                }
+                self.logger.info("[AppLinksSDK] Delivered \(linksToSend.count) queued link(s) to first subscriber")
+            }
         }
     }
     
     private func onSubscriptionCancelled() {
         subscriberCount = max(0, subscriberCount - 1)
     }
+    
 }
 
 // MARK: - Public Types

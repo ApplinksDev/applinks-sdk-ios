@@ -45,6 +45,16 @@ else
     exit 1
 fi
 
+# Update version in AppLinksSDK.podspec
+PODSPEC_FILE="AppLinksSDK.podspec"
+if [ -f "$PODSPEC_FILE" ]; then
+    sed -i '' "s/spec.version          = '[^']*'/spec.version          = '$VERSION'/" "$PODSPEC_FILE"
+    echo "✓ Updated version to $VERSION in $PODSPEC_FILE"
+else
+    echo "✗ Could not find $PODSPEC_FILE"
+    exit 1
+fi
+
 echo ""
 echo "Version updated to $VERSION and build date set to $BUILD_DATE in all files."
 echo ""
