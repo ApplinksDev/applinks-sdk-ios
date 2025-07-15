@@ -15,8 +15,25 @@ public class AppLinksSDK: ObservableObject {
     
     private static var _instance: AppLinksSDK?
     
-    //
-    public let linkPublisher = PassthroughSubject<LinkHandlingResult, Never>()
+    // MARK: - Publishers
+    
+    private let _linkPublisher = PassthroughSubject<LinkHandlingResult, Never>()
+    private var pendingLinks: [LinkHandlingResult] = []
+    private var subscriberCount = 0
+    
+    /// Publisher for link handling results with queuing support
+    public lazy var linkPublisher: AnyPublisher<LinkHandlingResult, Never> = {
+        _linkPublisher
+            .handleEvents(
+                receiveSubscription: { [weak self] _ in
+                    self?.onSubscriptionReceived()
+                },
+                receiveCancel: { [weak self] in
+                    self?.onSubscriptionCancelled()
+                }
+            )
+            .eraseToAnyPublisher()
+    }()
     
     // MARK: - Properties
     
@@ -146,8 +163,8 @@ public class AppLinksSDK: ObservableObject {
                     )
                 }
                 
-                // Invoke the callback if available
-                linkPublisher.send(result)
+                // Send result through publisher
+                sendLinkResult(result)
             } catch {
                 // Create error result and invoke callback
                 let errorResult = LinkHandlingResult(
@@ -158,7 +175,7 @@ public class AppLinksSDK: ObservableObject {
                     metadata: [:],
                     error: error.localizedDescription
                 )
-                linkPublisher.send(errorResult)
+                sendLinkResult(errorResult)
             }
         }
     }
@@ -219,8 +236,8 @@ public class AppLinksSDK: ObservableObject {
                         )
                     }
                     
-                    // Invoke the callback for deferred deep link
-                    linkPublisher.send(result)
+                    // Send deferred deep link result
+                    sendLinkResult(result)
                 } catch {
                     // Create error result and invoke callback
                     let errorResult = LinkHandlingResult(
@@ -231,12 +248,41 @@ public class AppLinksSDK: ObservableObject {
                         metadata: [:],
                         error: error.localizedDescription
                     )
-                    linkPublisher.send(errorResult)
+                    sendLinkResult(errorResult)
                 }
             } else {
                 self.logger.debug("[AppLinksSDK] No deferred deep link found in clipboard")
             }
         }
+    }
+    
+    // MARK: - Link Queue Management
+    
+    private func sendLinkResult(_ result: LinkHandlingResult) {
+        if subscriberCount > 0 {
+            _linkPublisher.send(result)
+        } else {
+            // Queue the link for when subscribers become available
+            pendingLinks.append(result)
+            logger.debug("[AppLinksSDK] Queued link result - no active subscribers")
+        }
+    }
+    
+    private func onSubscriptionReceived() {
+        subscriberCount += 1
+        
+        // Send all pending links to the first subscriber only
+        if subscriberCount == 1 && !pendingLinks.isEmpty {
+            for pendingLink in pendingLinks {
+                _linkPublisher.send(pendingLink)
+            }
+            logger.info("[AppLinksSDK] Delivered \(pendingLinks.count) queued link(s) to first subscriber")
+            pendingLinks.removeAll()
+        }
+    }
+    
+    private func onSubscriptionCancelled() {
+        subscriberCount = max(0, subscriberCount - 1)
     }
 }
 
