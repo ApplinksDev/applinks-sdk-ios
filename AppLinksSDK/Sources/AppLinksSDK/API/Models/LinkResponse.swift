@@ -9,9 +9,9 @@ internal struct LinkResponse: Codable {
     let originalUrl: String
     let deepLinkPath: String
     let deepLinkParams: [String: String]
-    let expiresAt: String?
-    let createdAt: String
-    let updatedAt: String
+    let expiresAt: Date?
+    let createdAt: Date
+    let updatedAt: Date
     let fullUrl: String
     
     enum CodingKeys: String, CodingKey {

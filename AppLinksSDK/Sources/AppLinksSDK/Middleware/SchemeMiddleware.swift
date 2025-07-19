@@ -50,24 +50,14 @@ internal class SchemeMiddleware: LinkMiddleware {
         if let query = url.query {
             let queryItems = URLComponents(string: "?" + query)?.queryItems ?? []
             var params: [String: String] = [:]
-            var visitId: String?
             
             for item in queryItems {
                 if let value = item.value {
-                    if item.name == "visit_id" {
-                        visitId = value
-                    } else {
-                        params[item.name] = value
-                    }
+                    params[item.name] = value
                 }
             }
             
             updatedContext.deepLinkParams = params
-            
-            // Add visit_id to additionalData if present
-            if let visitId = visitId {
-                updatedContext.additionalData["visitId"] = visitId
-            }
         }
         
         logger.debug("[AppLinksSDK] Parsed scheme URL: \(url)")

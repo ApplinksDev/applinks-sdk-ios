@@ -44,6 +44,9 @@ public class AppLinksSDK: ObservableObject {
     private let clipboardManager: ClipboardManager
     private let customMiddleware: [AnyLinkMiddleware]
     private let logger: AppLinksSDKLogger
+    
+    /// Public API for creating shortened links
+    public lazy var linkShortener: LinkShortener = LinkShortener(apiClient: apiClient)
 
     // MARK: - Initialization
     

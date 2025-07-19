@@ -11,6 +11,19 @@ internal class AppLinksApiClient {
     private let connectTimeout: TimeInterval = 10.0
     private let readTimeout: TimeInterval = 10.0
     
+    // JSON Encoder/Decoder with Rails-compatible ISO8601 date formatting
+    private let jsonEncoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .railsISO8601
+        return encoder
+    }()
+    
+    private let jsonDecoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .railsISO8601
+        return decoder
+    }()
+    
     init(serverUrl: String, apiKey: String?) {
         self.serverUrl = serverUrl
         self.apiKey = apiKey
@@ -33,23 +46,24 @@ internal class AppLinksApiClient {
         
         return try await executeRequest(request, resourceType: "link")
     }
-
-    /// Fetch visit details by ID
-    func fetchVisitDetails(visitId: String) async throws -> VisitDetailsResponse {
-        logger.debug("[AppLinksSDK] Fetching visit details with ID: \(visitId)")
-        
-        let url = URL(string: "\(serverUrl)/api/v1/visits/\(visitId)/details")!
-        let request = buildRequest(url: url)
-        
-        return try await executeRequest(request, resourceType: "visit")
-    }
     
     /// Retrieve link details by URL
-    func retrieveLink(url linkUrl: String) async throws -> LinkRetrievalResponse {
+    func retrieveLink(url linkUrl: String) async throws -> LinkResponse {
         logger.debug("[AppLinksSDK] Retrieving link with URL: \(linkUrl)")
         
-        let url = URL(string: "\(serverUrl)/api/v1/public/links/retrieve")!
+        let url = URL(string: "\(serverUrl)/api/v1/links/retrieve")!
         let requestBody = LinkRetrieveRequest(url: linkUrl)
+        let request = try buildPostRequest(url: url, body: requestBody)
+        
+        return try await executeRequest(request, resourceType: "link")
+    }
+    
+    /// Create a new link
+    func createLink(domain: String, linkData: CreateLinkRequest.LinkData) async throws -> LinkResponse {
+        logger.debug("[AppLinksSDK] Creating new link for domain: \(domain)")
+        
+        let url = URL(string: "\(serverUrl)/api/v1/links")!
+        let requestBody = CreateLinkRequest(domain: domain, link: linkData)
         let request = try buildPostRequest(url: url, body: requestBody)
         
         return try await executeRequest(request, resourceType: "link")
@@ -83,8 +97,7 @@ internal class AppLinksApiClient {
             request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
         
-        let encoder = JSONEncoder()
-        request.httpBody = try encoder.encode(body)
+        request.httpBody = try jsonEncoder.encode(body)
         
         return request
     }
@@ -100,13 +113,12 @@ internal class AppLinksApiClient {
             logger.debug("[AppLinksSDK] Response code: \(httpResponse.statusCode)")
             
             switch httpResponse.statusCode {
-            case 200:
-                let decoder = JSONDecoder()
-                return try decoder.decode(T.self, from: data)
+            case 200, 201:
+                return try jsonDecoder.decode(T.self, from: data)
                 
             case 400:
                 // Try to parse error response for Bad Request
-                if let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
+                if let errorResponse = try? jsonDecoder.decode(ErrorResponse.self, from: data) {
                     throw AppLinksError.networkError(errorResponse.error.message)
                 } else {
                     throw AppLinksError.networkError("Bad request")
@@ -121,9 +133,17 @@ internal class AppLinksApiClient {
             case 404:
                 throw AppLinksError.networkError("\(resourceType.capitalized) not found")
                 
+            case 422:
+                // Unprocessable Entity - validation errors
+                if let errorResponse = try? jsonDecoder.decode(ErrorResponse.self, from: data) {
+                    throw AppLinksError.networkError(errorResponse.error.message)
+                } else {
+                    throw AppLinksError.networkError("Validation error")
+                }
+                
             default:
                 // Try to parse error response
-                if let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: data) {
+                if let errorResponse = try? jsonDecoder.decode(ErrorResponse.self, from: data) {
                     throw AppLinksError.networkError(errorResponse.error.message)
                 } else {
                     throw AppLinksError.networkError("Server error: \(httpResponse.statusCode)")

@@ -35,9 +35,8 @@ internal class UniversalLinkMiddleware: LinkMiddleware {
             let linkRetrievalResponse = try await apiClient.retrieveLink(url: url.absoluteString)
             
             var updatedContext = context
-            updatedContext.deepLinkPath = linkRetrievalResponse.link.deepLinkPath
-            updatedContext.deepLinkParams = linkRetrievalResponse.link.deepLinkParams
-            updatedContext.additionalData["visitId"] = linkRetrievalResponse.visitId
+            updatedContext.deepLinkPath = linkRetrievalResponse.deepLinkPath
+            updatedContext.deepLinkParams = linkRetrievalResponse.deepLinkParams
             
             logger.log(level: .debug, "[AppLinksSDK] Retrieved link: \(url)")
             

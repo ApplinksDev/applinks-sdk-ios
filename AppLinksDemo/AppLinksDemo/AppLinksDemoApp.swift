@@ -72,6 +72,7 @@ class NavigationState: ObservableObject {
         case home
         case product
         case promo
+        case create
     }
     
     static let shared = NavigationState()

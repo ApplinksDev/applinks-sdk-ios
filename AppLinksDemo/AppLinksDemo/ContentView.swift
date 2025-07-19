@@ -22,6 +22,12 @@ struct ContentView: View {
                     Label("Promo", systemImage: "gift")
                 }
                 .tag(NavigationState.Tab.promo)
+            
+            LinkCreatorView()
+                .tabItem {
+                    Label("Create", systemImage: "link.badge.plus")
+                }
+                .tag(NavigationState.Tab.create)
         }
     }
 }
