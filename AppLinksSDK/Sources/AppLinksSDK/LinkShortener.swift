@@ -9,41 +9,26 @@ public class LinkShortener {
         self.apiClient = apiClient
     }
     
-    /// Create a new shortened link
-    /// - Parameters:
-    ///   - domain: The domain to create the link on
-    ///   - title: Title for the link
-    ///   - deepLinkPath: The in-app path/route to navigate to
-    ///   - originalUrl: The web URL to redirect to if app is not installed
-    ///   - deepLinkParams: Additional parameters for deep linking
-    ///   - expiresAt: Optional expiration date for the link
-    ///   - pathType: Type of path to generate (unguessable or short)
+    /// Create a new shortened link using parameters struct
+    /// - Parameter params: Link creation parameters
     /// - Returns: Created link details
-    public func createLink(
-        domain: String,
-        title: String,
-        deepLinkPath: String,
-        originalUrl: String? = nil,
-        deepLinkParams: [String: String]? = nil,
-        expiresAt: Date? = nil,
-        pathType: LinkPathType = .unguessable
-    ) async throws -> CreatedLink {
-        logger.debug("[AppLinksSDK] Creating link with title: \(title)")
+    public func createLink(_ params: LinkCreationParams) async throws -> CreatedLink {
+        logger.debug("[AppLinksSDK] Creating link with title: \(params.title)")
         
         // Build the request
         let linkData = CreateLinkRequest.LinkData(
-            title: title,
-            originalUrl: originalUrl,
-            deepLinkPath: deepLinkPath,
-            deepLinkParams: deepLinkParams,
-            expiresAt: expiresAt,
+            title: params.title,
+            originalUrl: params.webLink,
+            deepLinkPath: params.deepLinkPath,
+            deepLinkParams: params.deepLinkParams,
+            expiresAt: params.expiresAt,
             aliasPathAttributes: CreateLinkRequest.AliasPathAttributes(
-                type: pathType.toInternalType()
+                type: params.linkType.toInternalType()
             )
         )
         
         // Make the API call
-        let response = try await apiClient.createLink(domain: domain, linkData: linkData)
+        let response = try await apiClient.createLink(domain: params.domain, linkData: linkData)
         
         // Convert to public model
         return CreatedLink(
@@ -51,7 +36,7 @@ public class LinkShortener {
             title: response.title,
             aliasPath: response.aliasPath,
             domain: response.domain,
-            originalUrl: response.originalUrl,
+            webLink: response.originalUrl,
             deepLinkPath: response.deepLinkPath,
             deepLinkParams: response.deepLinkParams,
             expiresAt: response.expiresAt,
@@ -64,8 +49,8 @@ public class LinkShortener {
 
 // MARK: - Public Types
 
-/// Type of path to generate for the link
-public enum LinkPathType {
+/// Type of link to generate
+public enum LinkType {
     /// Generate a 32-character unguessable path
     case unguessable
     /// Generate a 4-6 character short path
@@ -81,6 +66,43 @@ public enum LinkPathType {
     }
 }
 
+/// Parameters for creating a shortened link
+public struct LinkCreationParams {
+    /// The domain to create the link on
+    public let domain: String
+    /// Title for the link
+    public let title: String
+    /// The in-app path/route to navigate to
+    public let deepLinkPath: String
+    /// The web URL to redirect to if app is not installed
+    public let webLink: String?
+    /// Additional parameters for deep linking
+    public let deepLinkParams: [String: String]?
+    /// Optional expiration date for the link
+    public let expiresAt: Date?
+    /// Type of link to generate (unguessable or short)
+    public let linkType: LinkType
+    
+    /// Initialize with all parameters
+    public init(
+        domain: String,
+        title: String,
+        deepLinkPath: String,
+        webLink: String? = nil,
+        deepLinkParams: [String: String]? = nil,
+        expiresAt: Date? = nil,
+        linkType: LinkType = .unguessable
+    ) {
+        self.domain = domain
+        self.title = title
+        self.deepLinkPath = deepLinkPath
+        self.webLink = webLink
+        self.deepLinkParams = deepLinkParams
+        self.expiresAt = expiresAt
+        self.linkType = linkType
+    }
+}
+
 /// Result of creating a link
 public struct CreatedLink {
     /// Unique identifier of the link
@@ -92,7 +114,7 @@ public struct CreatedLink {
     /// Domain hosting the link
     public let domain: String
     /// Web URL to redirect to if app is not installed
-    public let originalUrl: String?
+    public let webLink: String?
     /// In-app path/route to navigate to
     public let deepLinkPath: String
     /// Additional parameters for deep linking

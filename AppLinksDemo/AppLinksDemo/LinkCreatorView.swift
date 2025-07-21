@@ -7,7 +7,7 @@ struct LinkCreatorView: View {
     @State private var deepLinkPath = "/product/123"
     @State private var originalUrl = "https://example.com/product/123"
     @State private var deepLinkParams = "campaign=summer,discount=25"
-    @State private var selectedPathType = LinkPathType.unguessable
+    @State private var selectedLinkType = LinkType.unguessable
     @State private var isCreating = false
     @State private var createdLink: CreatedLink?
     @State private var errorMessage: String?
@@ -35,9 +35,9 @@ struct LinkCreatorView: View {
                         .autocapitalization(.none)
                         .disableAutocorrection(true)
                     
-                    Picker("Path Type", selection: $selectedPathType) {
-                        Text("Unguessable (32 chars)").tag(LinkPathType.unguessable)
-                        Text("Short (4-6 chars)").tag(LinkPathType.short)
+                    Picker("Path Type", selection: $selectedLinkType) {
+                        Text("Unguessable (32 chars)").tag(LinkType.unguessable)
+                        Text("Short (4-6 chars)").tag(LinkType.short)
                     }
                 }
                 
@@ -126,14 +126,14 @@ struct LinkCreatorView: View {
         Task {
             do {
                 let link = try await AppLinksSDK.shared.linkShortener.createLink(
-                    domain: domain,
-                    title: title,
-                    deepLinkPath: deepLinkPath,
-                    originalUrl: originalUrl.isEmpty ? nil : originalUrl,
-                    deepLinkParams: params.isEmpty ? nil : params,
-                    pathType: selectedPathType
+                    LinkCreationParams(
+                        domain: domain,
+                        title: title,
+                        deepLinkPath: deepLinkPath, webLink: originalUrl.isEmpty ? nil : originalUrl,
+                        deepLinkParams: params.isEmpty ? nil : params,
+                        linkType: selectedLinkType,
+                    )
                 )
-                
                 await MainActor.run {
                     createdLink = link
                     isCreating = false
