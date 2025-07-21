@@ -47,14 +47,12 @@ internal class SchemeMiddleware: LinkMiddleware {
         }
         
         // Parse query parameters
-        if let query = url.query {
-            let queryItems = URLComponents(string: "?" + query)?.queryItems ?? []
+        if let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+           let queryItems = components.queryItems {
             var params: [String: String] = [:]
             
             for item in queryItems {
-                if let value = item.value {
-                    params[item.name] = value
-                }
+                params[item.name] = item.value ?? ""
             }
             
             updatedContext.deepLinkParams = params
