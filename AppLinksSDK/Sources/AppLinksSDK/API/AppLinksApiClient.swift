@@ -112,11 +112,16 @@ internal class AppLinksApiClient {
             
             logger.debug("[AppLinksSDK] Response code: \(httpResponse.statusCode)")
             
-            // Try to parse error response
-            if let errorResponse = try? jsonDecoder.decode(ErrorResponse.self, from: data) {
-                throw AppLinksError.networkError(errorResponse.error.message)
-            } else {
-                throw AppLinksError.networkError("Server error: \(httpResponse.statusCode)")
+            switch httpResponse.statusCode {
+            case 200, 201:
+                return try jsonDecoder.decode(T.self, from: data)
+            default:
+                // Try to parse error response
+                if let errorResponse = try? jsonDecoder.decode(ErrorResponse.self, from: data) {
+                    throw AppLinksError.networkError(errorResponse.error.message)
+                } else {
+                    throw AppLinksError.networkError("Server error: \(httpResponse.statusCode)")
+                }
             }
         } catch let error as AppLinksError {
             throw error
