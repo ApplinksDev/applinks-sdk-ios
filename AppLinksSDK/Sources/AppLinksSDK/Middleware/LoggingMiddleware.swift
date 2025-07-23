@@ -35,4 +35,9 @@ public class LoggingMiddleware: LinkMiddleware {
             throw error
         }
     }
+    
+    public func canHandle(url: URL) -> Bool {
+        /// Middleware does not handle links, only does logging.
+        return false
+    }
 }

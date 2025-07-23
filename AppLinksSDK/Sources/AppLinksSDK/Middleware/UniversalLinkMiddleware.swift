@@ -47,7 +47,7 @@ internal class UniversalLinkMiddleware: LinkMiddleware {
         }
     }
     
-    private func canHandle(url: URL) -> Bool {
+    public func canHandle(url: URL) -> Bool {
         // Check if URL uses http/https scheme
         guard let scheme = url.scheme?.lowercased(),
               ["http", "https"].contains(scheme) else {

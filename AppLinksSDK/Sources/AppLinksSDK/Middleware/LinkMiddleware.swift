@@ -13,14 +13,18 @@ public protocol LinkMiddleware {
         context: LinkHandlingContext,
         next: @escaping (URL, LinkHandlingContext) async throws -> LinkHandlingResult
     ) async throws -> LinkHandlingResult
+    
+    func canHandle(url: URL) -> Bool
 }
 
 /// A type-erased wrapper for LinkMiddleware
 public struct AnyLinkMiddleware: LinkMiddleware {
     private let _process: (URL, LinkHandlingContext, @escaping (URL, LinkHandlingContext) async throws -> LinkHandlingResult) async throws -> LinkHandlingResult
+    private let _canHandle: (URL) -> Bool
     
     public init<M: LinkMiddleware>(_ middleware: M) {
         self._process = middleware.process
+        self._canHandle = middleware.canHandle
     }
     
     public func process(
@@ -29,6 +33,10 @@ public struct AnyLinkMiddleware: LinkMiddleware {
         next: @escaping (URL, LinkHandlingContext) async throws -> LinkHandlingResult
     ) async throws -> LinkHandlingResult {
         return try await _process(url, context, next)
+    }
+    
+    public func canHandle(url: URL) -> Bool {
+        return _canHandle(url)
     }
 }
 
@@ -43,6 +51,14 @@ public struct MiddlewareChain {
     
     public init(middlewares: [AnyLinkMiddleware] = []) {
         self._middlewares = middlewares
+    }
+    
+    /// Returns wether any middleware can handle the given URL.
+    /// - Parameters:
+    ///   - url: The URL being processed
+    /// - Returns: Boolean
+    public func canHandle(url: URL) -> Bool {
+        return middlewares.contains(where: { $0.canHandle(url: url) })
     }
     
     /// Execute the middleware chain

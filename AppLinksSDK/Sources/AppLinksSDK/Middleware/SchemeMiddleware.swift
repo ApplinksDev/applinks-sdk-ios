@@ -64,7 +64,7 @@ internal class SchemeMiddleware: LinkMiddleware {
     }
     
     
-    private func canHandle(url: URL) -> Bool {
+    public func canHandle(url: URL) -> Bool {
         guard let scheme = url.scheme?.lowercased() else {
             return false
         }

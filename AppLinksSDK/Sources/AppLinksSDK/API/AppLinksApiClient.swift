@@ -112,44 +112,12 @@ internal class AppLinksApiClient {
             
             logger.debug("[AppLinksSDK] Response code: \(httpResponse.statusCode)")
             
-            switch httpResponse.statusCode {
-            case 200, 201:
-                return try jsonDecoder.decode(T.self, from: data)
-                
-            case 400:
-                // Try to parse error response for Bad Request
-                if let errorResponse = try? jsonDecoder.decode(ErrorResponse.self, from: data) {
-                    throw AppLinksError.networkError(errorResponse.error.message)
-                } else {
-                    throw AppLinksError.networkError("Bad request")
-                }
-                
-            case 401:
-                throw AppLinksError.networkError("Unauthorized: Invalid or missing API token")
-                
-            case 403:
-                throw AppLinksError.networkError("Forbidden: Access denied")
-                
-            case 404:
-                throw AppLinksError.networkError("\(resourceType.capitalized) not found")
-                
-            case 422:
-                // Unprocessable Entity - validation errors
-                if let errorResponse = try? jsonDecoder.decode(ErrorResponse.self, from: data) {
-                    throw AppLinksError.networkError(errorResponse.error.message)
-                } else {
-                    throw AppLinksError.networkError("Validation error")
-                }
-                
-            default:
-                // Try to parse error response
-                if let errorResponse = try? jsonDecoder.decode(ErrorResponse.self, from: data) {
-                    throw AppLinksError.networkError(errorResponse.error.message)
-                } else {
-                    throw AppLinksError.networkError("Server error: \(httpResponse.statusCode)")
-                }
+            // Try to parse error response
+            if let errorResponse = try? jsonDecoder.decode(ErrorResponse.self, from: data) {
+                throw AppLinksError.networkError(errorResponse.error.message)
+            } else {
+                throw AppLinksError.networkError("Server error: \(httpResponse.statusCode)")
             }
-            
         } catch let error as AppLinksError {
             throw error
         } catch {

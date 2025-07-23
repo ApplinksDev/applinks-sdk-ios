@@ -144,27 +144,19 @@ public class AppLinksSDK: ObservableObject {
     
     // MARK: - Public Methods
     
-    /// Handle an incoming URL
-    public func handleLink(_ url: URL) {
+    /// Handles an incoming URL
+    /// - Parameters:
+    ///   - url: The URL being processed
+    /// - Returns: Boolean indicating if the link is being processed by AppLinks.
+    public func handleLink(_ url: URL) -> Bool {
+        let handlable = middlewareChain.canHandle(url: url)
+        if (!handlable) {
+            return false
+        }
+        
         Task {
             do {
-                let context = LinkHandlingContext(
-                    isFirstLaunch: preferences.isFirstLaunch,
-                    launchTimestamp: Date()
-                )
-                
-                let result = try await middlewareChain.execute(
-                    url: url,
-                    context: context
-                ) { finalUrl, finalContext in
-                    return LinkHandlingResult(
-                        handled: true,
-                        originalUrl: url,
-                        path: finalContext.deepLinkPath ?? "",
-                        params: finalContext.deepLinkParams,
-                        metadata: finalContext.additionalData
-                    )
-                }
+                let result = try await processMiddlewareChain(url: url)
                 
                 // Send result through publisher
                 sendLinkResult(result)
@@ -180,6 +172,23 @@ public class AppLinksSDK: ObservableObject {
                 )
                 sendLinkResult(errorResult)
             }
+        }
+        
+        return true
+    }
+    
+    public func getAppLinkDetails(from url: URL) async -> LinkHandlingResult {
+        do {
+            return try await processMiddlewareChain(url: url)
+        } catch {
+            return LinkHandlingResult(
+                handled: false,
+                originalUrl: url,
+                path: "",
+                params: [:],
+                metadata: [:],
+                error: error.localizedDescription
+            )
         }
     }
     
@@ -223,21 +232,7 @@ public class AppLinksSDK: ObservableObject {
                 self.logger.info("[AppLinksSDK] Deferred deep link retrieved: \(url)")
                 
                 do {
-                    // Handle the retrieved link through middleware
-                    let context = LinkHandlingContext(
-                        isFirstLaunch: true,
-                        launchTimestamp: Date()
-                    )
-                    
-                    let result = try await middlewareChain.execute(url: url, context: context) { finalUrl, finalContext in
-                        return LinkHandlingResult(
-                            handled: true,
-                            originalUrl: url,
-                            path: finalContext.deepLinkPath ?? "",
-                            params: finalContext.deepLinkParams,
-                            metadata: finalContext.additionalData
-                        )
-                    }
+                    let result = try await processMiddlewareChain(url: url)
                     
                     // Send deferred deep link result
                     sendLinkResult(result)
@@ -294,6 +289,28 @@ public class AppLinksSDK: ObservableObject {
         subscriberCount = max(0, subscriberCount - 1)
     }
     
+    // MARK: Middleware chain processing
+    private func processMiddlewareChain(url: URL) async throws -> LinkHandlingResult {
+        let context = LinkHandlingContext(
+            isFirstLaunch: preferences.isFirstLaunch,
+            launchTimestamp: Date()
+        )
+        
+        let result = try await middlewareChain.execute(
+            url: url,
+            context: context
+        ) { finalUrl, finalContext in
+            return LinkHandlingResult(
+                handled: true,
+                originalUrl: url,
+                path: finalContext.deepLinkPath ?? "",
+                params: finalContext.deepLinkParams,
+                metadata: finalContext.additionalData
+            )
+        }
+        
+        return result
+    }
 }
 
 // MARK: - Public Types
