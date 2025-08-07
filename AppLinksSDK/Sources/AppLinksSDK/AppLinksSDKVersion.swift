@@ -3,7 +3,7 @@ import Foundation
 /// Version information for the AppLinks SDK
 public struct AppLinksSDKVersion {
     /// The current version of the SDK
-    public static let current = "1.0.8"
+    public static let current = "1.0.9"
     
     /// The name of the SDK
     public static let name = "AppLinksSDK"
