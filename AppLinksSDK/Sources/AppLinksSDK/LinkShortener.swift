@@ -18,13 +18,19 @@ public class LinkShortener {
         // Build the request
         let linkData = CreateLinkRequest.LinkData(
             title: params.title,
+            subtitle: params.subtitle,
             originalUrl: params.webLink,
             deepLinkPath: params.deepLinkPath,
             deepLinkParams: params.deepLinkParams,
             expiresAt: params.expiresAt,
             aliasPathAttributes: CreateLinkRequest.AliasPathAttributes(
                 type: params.linkType.toInternalType()
-            )
+            ),
+            backgroundType: params.backgroundType,
+            backgroundColor: params.backgroundColor,
+            backgroundColorFrom: params.backgroundColorFrom,
+            backgroundColorTo: params.backgroundColorTo,
+            backgroundColorDirection: params.backgroundColorDirection
         )
         
         // Make the API call
@@ -72,6 +78,8 @@ public struct LinkCreationParams {
     public let domain: String
     /// Title for the link
     public let title: String
+    /// Subtitle for the link (optional)
+    public let subtitle: String?
     /// The in-app path/route to navigate to
     public let deepLinkPath: String
     /// The web URL to redirect to if app is not installed
@@ -82,24 +90,46 @@ public struct LinkCreationParams {
     public let expiresAt: Date?
     /// Type of link to generate (unguessable or short)
     public let linkType: LinkType
+    /// Background type for the link ("solid" or "gradient")
+    public let backgroundType: String?
+    /// Background color (hex color)
+    public let backgroundColor: String?
+    /// Background gradient start color (hex color)
+    public let backgroundColorFrom: String?
+    /// Background gradient end color (hex color)
+    public let backgroundColorTo: String?
+    /// Background gradient direction
+    public let backgroundColorDirection: String?
     
     /// Initialize with all parameters
     public init(
         domain: String,
         title: String,
+        subtitle: String? = nil,
         deepLinkPath: String,
         webLink: String? = nil,
         deepLinkParams: [String: String]? = nil,
         expiresAt: Date? = nil,
-        linkType: LinkType = .unguessable
+        linkType: LinkType = .unguessable,
+        backgroundType: String? = nil,
+        backgroundColor: String? = nil,
+        backgroundColorFrom: String? = nil,
+        backgroundColorTo: String? = nil,
+        backgroundColorDirection: String? = nil
     ) {
         self.domain = domain
         self.title = title
+        self.subtitle = subtitle
         self.deepLinkPath = deepLinkPath
         self.webLink = webLink
         self.deepLinkParams = deepLinkParams
         self.expiresAt = expiresAt
         self.linkType = linkType
+        self.backgroundType = backgroundType
+        self.backgroundColor = backgroundColor
+        self.backgroundColorFrom = backgroundColorFrom
+        self.backgroundColorTo = backgroundColorTo
+        self.backgroundColorDirection = backgroundColorDirection
     }
 }
 
