@@ -210,32 +210,43 @@ public class AppLinksSDK: ObservableObject {
         return AppLinksSDKVersion.asDictionary
     }
     
+    /// Unified deferred deep link processor - handles both automatic and manual flows
+    /// - Parameter markFirstLaunch: Whether to mark the first launch as completed
+    /// - Returns: LinkHandlingResult if a deferred deep link is found, nil otherwise
+    private func processDeferredDeepLink(markFirstLaunch: Bool) async -> LinkHandlingResult? {
+        let result = await clipboardManager.retrieveDeferredDeepLink()
+        
+        if markFirstLaunch {
+            preferences.markFirstLaunchCompleted()
+        }
+        
+        guard let url = result.url else {
+            logger.debug("[AppLinksSDK] No deferred deep link found")
+            return nil
+        }
+        
+        logger.info("[AppLinksSDK] Deferred deep link found: \(url)")
+        
+        do {
+            let linkResult = try await processMiddlewareChain(url: url)
+            return linkResult
+        } catch {
+            logger.error("[AppLinksSDK] Error processing deferred deep link: \(error)")
+            return LinkHandlingResult(
+                handled: false,
+                originalUrl: url,
+                path: "",
+                params: [:],
+                metadata: [:],
+                error: error.localizedDescription
+            )
+        }
+    }
+    
     /// Manually check for deferred deep links
     /// - Returns: LinkHandlingResult if a deferred deep link is found, nil otherwise
     public func checkForDeferredDeepLink() async -> LinkHandlingResult? {
-        let result = await clipboardManager.retrieveDeferredDeepLink()
-        
-        if let url = result.url {
-            logger.info("[AppLinksSDK] Manual deferred deep link check - found: \(url)")
-            
-            do {
-                let linkResult = try await processMiddlewareChain(url: url)
-                return linkResult
-            } catch {
-                logger.error("[AppLinksSDK] Error processing manual deferred deep link: \(error)")
-                return LinkHandlingResult(
-                    handled: false,
-                    originalUrl: url,
-                    path: "",
-                    params: [:],
-                    metadata: [:],
-                    error: error.localizedDescription
-                )
-            }
-        } else {
-            logger.debug("[AppLinksSDK] Manual deferred deep link check - no link found")
-            return nil
-        }
+        return await processDeferredDeepLink(markFirstLaunch: false)
     }
     
     // MARK: - Deferred Deep Links
@@ -254,33 +265,8 @@ public class AppLinksSDK: ObservableObject {
         
         self.logger.info("[AppLinksSDK] First launch detected - checking for deferred deep link")
         Task {
-            let result = await clipboardManager.retrieveDeferredDeepLink()
-            
-            // Mark first launch as completed
-            preferences.markFirstLaunchCompleted()
-            
-            if let url = result.url {
-                self.logger.info("[AppLinksSDK] Deferred deep link retrieved: \(url)")
-                
-                do {
-                    let result = try await processMiddlewareChain(url: url)
-                    
-                    // Send deferred deep link result
-                    sendLinkResult(result)
-                } catch {
-                    // Create error result and invoke callback
-                    let errorResult = LinkHandlingResult(
-                        handled: false,
-                        originalUrl: url,
-                        path: "",
-                        params: [:],
-                        metadata: [:],
-                        error: error.localizedDescription
-                    )
-                    sendLinkResult(errorResult)
-                }
-            } else {
-                self.logger.debug("[AppLinksSDK] No deferred deep link found in clipboard")
+            if let result = await processDeferredDeepLink(markFirstLaunch: true) {
+                sendLinkResult(result)
             }
         }
     }
