@@ -79,6 +79,7 @@ public class AppLinksSDK: ObservableObject {
         supportedSchemes: Set<String> = [],
         logLevel: AppLinksSDKLogLevel = .info,
         customMiddleware: [AnyLinkMiddleware] = [],
+        deferredDeepLinkingEnabled: Bool = true
     ) -> AppLinksSDK {
         // Validate API key format
         if apiKey.hasPrefix("sk_") {
@@ -99,7 +100,8 @@ public class AppLinksSDK: ObservableObject {
             serverUrl: serverUrl,
             apiKey: apiKey,
             supportedDomains: supportedDomains,
-            supportedSchemes: supportedSchemes
+            supportedSchemes: supportedSchemes,
+            deferredDeepLinkingEnabled: deferredDeepLinkingEnabled
         )
         
         AppLinksSDKLogger.shared.logLevel = logLevel
@@ -208,6 +210,34 @@ public class AppLinksSDK: ObservableObject {
         return AppLinksSDKVersion.asDictionary
     }
     
+    /// Manually check for deferred deep links
+    /// - Returns: LinkHandlingResult if a deferred deep link is found, nil otherwise
+    public func checkForDeferredDeepLink() async -> LinkHandlingResult? {
+        let result = await clipboardManager.retrieveDeferredDeepLink()
+        
+        if let url = result.url {
+            logger.info("[AppLinksSDK] Manual deferred deep link check - found: \(url)")
+            
+            do {
+                let linkResult = try await processMiddlewareChain(url: url)
+                return linkResult
+            } catch {
+                logger.error("[AppLinksSDK] Error processing manual deferred deep link: \(error)")
+                return LinkHandlingResult(
+                    handled: false,
+                    originalUrl: url,
+                    path: "",
+                    params: [:],
+                    metadata: [:],
+                    error: error.localizedDescription
+                )
+            }
+        } else {
+            logger.debug("[AppLinksSDK] Manual deferred deep link check - no link found")
+            return nil
+        }
+    }
+    
     // MARK: - Deferred Deep Links
     
     private func checkForDeferredDeepLinkIfFirstLaunch() {
@@ -216,12 +246,13 @@ public class AppLinksSDK: ObservableObject {
             return
         }
         
-        self.logger.info("[AppLinksSDK] First launch detected - checking for deferred deep link")
+        guard config.deferredDeepLinkingEnabled else {
+            self.logger.info("[AppLinksSDK] Deferred deep linking disabled - skipping check")
+            preferences.markFirstLaunchCompleted()
+            return
+        }
         
-        checkForDeferredDeepLink()
-    }
-    
-    private func checkForDeferredDeepLink() {
+        self.logger.info("[AppLinksSDK] First launch detected - checking for deferred deep link")
         Task {
             let result = await clipboardManager.retrieveDeferredDeepLink()
             

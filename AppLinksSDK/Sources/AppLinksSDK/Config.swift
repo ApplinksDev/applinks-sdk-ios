@@ -20,6 +20,9 @@ public struct AppLinksConfig {
     /// Supported custom URL schemes
     public let supportedSchemes: Set<String>
     
+    /// Enable automatic deferred deep link checking on first launch
+    public let deferredDeepLinkingEnabled: Bool
+    
     /// Default configuration
     public init(
         autoHandleLinks: Bool = true,
@@ -27,7 +30,8 @@ public struct AppLinksConfig {
         serverUrl: String = "https://applinks.com",
         apiKey: String? = nil,
         supportedDomains: Set<String> = [],
-        supportedSchemes: Set<String> = []
+        supportedSchemes: Set<String> = [],
+        deferredDeepLinkingEnabled: Bool = true
     ) {
         self.autoHandleLinks = autoHandleLinks
         self.logLevel = logLevel
@@ -35,5 +39,6 @@ public struct AppLinksConfig {
         self.apiKey = apiKey
         self.supportedDomains = supportedDomains
         self.supportedSchemes = supportedSchemes
+        self.deferredDeepLinkingEnabled = deferredDeepLinkingEnabled
     }
 }

@@ -1,6 +1,6 @@
 Pod::Spec.new do |spec|
   spec.name             = 'AppLinksSDK'
-  spec.version          = '1.0.9'
+  spec.version          = '1.0.10'
   spec.summary          = 'iOS SDK for deferred deep linking using clipboard-based attribution'
   spec.description      = <<-DESC
     AppLinksSDK provides deferred deep linking functionality for iOS apps.

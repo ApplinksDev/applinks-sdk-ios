@@ -3,7 +3,7 @@ import Foundation
 /// Version information for the AppLinks SDK
 public struct AppLinksSDKVersion {
     /// The current version of the SDK
-    public static let current = "1.0.9"
+    public static let current = "1.0.10"
     
     /// The name of the SDK
     public static let name = "AppLinksSDK"
@@ -13,7 +13,7 @@ public struct AppLinksSDKVersion {
     
     /// The build date of the SDK
     /// Note: This is when the SDK was built/released, not compile time
-    public static let buildDate = "2025-08-07"
+    public static let buildDate = "2025-08-20"
     
     /// User agent string for HTTP requests
     internal static var userAgent: String {
