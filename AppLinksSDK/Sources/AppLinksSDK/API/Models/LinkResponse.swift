@@ -6,7 +6,7 @@ internal struct LinkResponse: Codable {
     let title: String
     let aliasPath: String
     let domain: String
-    let originalUrl: String
+    let originalUrl: String?
     let deepLinkPath: String
     let deepLinkParams: [String: String]
     let expiresAt: Date?
