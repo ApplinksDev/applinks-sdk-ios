@@ -276,6 +276,28 @@ final class AppLinksSDKAttributionTests: XCTestCase {
         ])
     }
 
+    func testSetAdvertisingIdIgnoresAValueThatIsNotAnIDFA() async throws {
+        respondSuccessfully()
+        let sdk = makeSDK(deferredDeepLinkingEnabled: false)
+
+        sdk.setAdvertisingId(" \(AttributionFixtures.idfa) ")
+        XCTAssertEqual(preferences.advertisingId, AttributionFixtures.idfa)
+        for invalid in ["Optional(\(AttributionFixtures.idfa))", "unavailable", "{\(AttributionFixtures.idfa)}", "E621E1F8C36C495A93FC0C247A3E6E5F"] {
+            sdk.setAdvertisingId(invalid)
+            XCTAssertEqual(preferences.advertisingId, AttributionFixtures.idfa, invalid)
+        }
+
+        // The zeroed ID iOS returns without ATT authorization is none
+        sdk.setAdvertisingId("00000000-0000-0000-0000-000000000000")
+        XCTAssertNil(preferences.advertisingId)
+
+        // An invalid ID never reaches the install report
+        sdk.setAdvertisingId("unavailable")
+        _ = await sdk.checkForDeferredDeepLink()
+        try await waitUntil { sdk.attributionId != nil }
+        XCTAssertNil(attributionRequests[0].json["advertising_id"])
+    }
+
     func testUpdateConsentRereadsTheATTStatus() async throws {
         respondSuccessfully()
         let sdk = makeSDK()

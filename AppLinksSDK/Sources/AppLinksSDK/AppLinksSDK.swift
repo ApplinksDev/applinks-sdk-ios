@@ -281,10 +281,18 @@ public class AppLinksSDK: ObservableObject {
     }
     
     /// Set the IDFA, which your app reads itself, only once the user allowed
-    /// tracking. The SDK never reads it. Pass nil to remove it.
+    /// tracking. The SDK never reads it. Pass nil to remove it. A value that
+    /// isn't an IDFA (a UUID) is ignored; the zeroed ID counts as none.
     public func setAdvertisingId(_ advertisingId: String?) {
-        let advertisingId = advertisingId?.trimmingCharacters(in: .whitespacesAndNewlines)
-        preferences.advertisingId = advertisingId?.isEmpty == false ? advertisingId : nil
+        switch AdvertisingId.parse(advertisingId) {
+        case .none:
+            preferences.advertisingId = nil
+        case .id(let id):
+            preferences.advertisingId = id
+        case .invalid:
+            logger.error("[AppLinksSDK] setAdvertisingId: the value isn't an IDFA, it's ignored. Pass ASIdentifierManager.shared().advertisingIdentifier.uuidString.")
+            return
+        }
         attributionManager?.trigger()
     }
     

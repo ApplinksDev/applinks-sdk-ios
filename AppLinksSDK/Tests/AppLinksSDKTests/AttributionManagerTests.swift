@@ -623,6 +623,67 @@ final class AttributionManagerTests: XCTestCase {
         }
     }
 
+    func testSendsTheConsentOfAnUpdateRefusedForTheAdvertisingId() async {
+        // The server refuses the whole update when the advertising ID it would store isn't an IDFA
+        respond { request in
+            request.json["advertising_id"] != nil
+                ? Stub(status: 422, body: AttributionFixtures.errorResponse(status: 422, message: "Validation failed: Advertising id must be an IDFA or a GAID"))
+                : Stub(status: 200, body: AttributionFixtures.attributionResponse())
+        }
+        reported()
+        preferences.advertisingId = "not-an-idfa"
+        deviceInfo.trackingAuthorizationStatus = "authorized"
+        preferences.adsConsent = true
+
+        await manager.sync()
+
+        XCTAssertEqual(requests.map(\.body), [
+            "{\"ads_consent\":true,\"advertising_id\":\"not-an-idfa\",\"att_status\":\"authorized\"}",
+            "{\"ads_consent\":true,\"att_status\":\"authorized\"}"
+        ])
+        XCTAssertEqual(preferences.sentAttributionFields?.adsConsent, true)
+        XCTAssertEqual(preferences.sentAttributionFields?.attStatus, "authorized")
+    }
+
+    func testRetriesTheConsentOfAnUpdateRefusedForTheAdvertisingIdWhenItsResendFails() async {
+        respond { request in
+            request.json["advertising_id"] != nil
+                ? Stub(status: 422, body: AttributionFixtures.errorResponse(status: 422, message: "Validation failed"))
+                : Stub(status: 503)
+        }
+        reported()
+        preferences.advertisingId = "not-an-idfa"
+        deviceInfo.trackingAuthorizationStatus = "authorized"
+        preferences.adsConsent = true
+
+        await manager.sync()
+        XCTAssertEqual(preferences.sentAttributionFields?.adsConsent, false)
+        XCTAssertEqual(preferences.sentAttributionFields?.advertisingId, "not-an-idfa")
+
+        respond { request in
+            request.json["advertising_id"] != nil
+                ? Stub(status: 422, body: AttributionFixtures.errorResponse(status: 422, message: "Validation failed"))
+                : Stub(status: 200, body: AttributionFixtures.attributionResponse())
+        }
+        await manager.sync()
+
+        XCTAssertEqual(requests.last?.body, "{\"ads_consent\":true,\"att_status\":\"authorized\"}")
+        XCTAssertEqual(preferences.sentAttributionFields?.adsConsent, true)
+    }
+
+    func testCapsTheVersionsAtTheServersLimit() async {
+        respondSuccessfully()
+        lookupDone()
+        deviceInfo.appVersion = String(repeating: "1", count: 100)
+
+        await manager.sync()
+
+        XCTAssertEqual(requests.first?.json["app_version"] as? String, String(repeating: "1", count: 64))
+        // Not sent again
+        await manager.sync()
+        XCTAssertEqual(requests.count, 1)
+    }
+
     // MARK: - Persistence
 
     func testStatePersistsAcrossARestart() async {

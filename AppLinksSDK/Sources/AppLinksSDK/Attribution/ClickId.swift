@@ -24,7 +24,7 @@ internal enum ClickId {
         return url[idRange].lowercased()
     }
 
-    /// Whether the value is a UUID
+    /// Whether the value is a UUID (8-4-4-4-12 hex)
     static func isClickId(_ value: String) -> Bool {
         uuid.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)) != nil
     }

@@ -60,13 +60,11 @@ internal actor AttributionManager {
 
     private func performSync() async {
         if preferences.attributionId == nil {
-            guard preferences.installReportDue, preferences.installLookupCompleted, !installReportDeferred else {
+            guard preferences.installReportDue, preferences.installLookupCompleted, !installReportDeferred,
+                  await reportInstall(desired: desiredFields()) else {
                 return
             }
-            await reportInstall(desired: desiredFields())
         }
-        // Also right after the report: a change made while it was in flight,
-        // or what a repeated report didn't apply
         if let attributionId = preferences.attributionId {
             await updateAttribution(id: attributionId, desired: desiredFields())
         }
@@ -80,15 +78,26 @@ internal actor AttributionManager {
             adsConsent: preferences.adsConsent,
             limitedDataUse: preferences.limitedDataUse,
             advertisingId: preferences.advertisingId,
-            appVersion: deviceInfo.appVersion,
-            osVersion: deviceInfo.osVersion
+            appVersion: deviceInfo.appVersion.map(Self.capped),
+            osVersion: deviceInfo.osVersion.map(Self.capped)
         )
     }
 
-    private func reportInstall(desired: AttributionFields) async {
+    /// The server refuses a version longer than 64 characters, and with it
+    /// the whole request
+    private static func capped(_ version: String) -> String {
+        String(version.prefix(64))
+    }
+
+    /// The fields the server always accepts, whatever the app passed
+    private static let consentKeys: Set<String> = ["att_status", "ads_consent", "limited_data_use"]
+
+    /// Report the install. Returns whether the server didn't apply all of
+    /// it, which an update sends right away.
+    private func reportInstall(desired: AttributionFields) async -> Bool {
         guard let bundleId = deviceInfo.bundleId, !bundleId.isEmpty else {
             logger.error("[AppLinksSDK] Install attribution: the app has no bundle ID, the install can't be reported")
-            return
+            return false
         }
 
         var body = desired.installReportBody
@@ -102,7 +111,6 @@ internal actor AttributionManager {
 
         switch await apiClient.reportInstall(body: body) {
         case .success(let attributionId, let created):
-            preferences.attributionId = attributionId
             // The server answers a repeat (200) with the install it recorded
             // first, taking only the repeat's stricter consent. When this
             // device sent that first report, the user allowed more since, so
@@ -110,19 +118,20 @@ internal actor AttributionManager {
             // reported by another device the click ID reached (the clipboard
             // syncs across the user's Apple devices), whose choice isn't
             // overridden.
-            if !created && sentBefore {
-                preferences.sentAttributionFields = .afterRepeatedReport
-            } else {
-                preferences.sentAttributionFields = desired
-            }
+            let partlyApplied = !created && sentBefore
+            preferences.sentAttributionFields = partlyApplied ? .afterRepeatedReport : desired
+            preferences.attributionId = attributionId
             finishInstallReport()
             logger.info("[AppLinksSDK] Install reported: attribution \(attributionId)")
+            return partlyApplied
         case .retryLater(let reason):
             installReportDeferred = true
             logger.warning("[AppLinksSDK] Install report failed (\(reason)), it will be retried at the next launch")
+            return false
         case .rejected(let statusCode, let message):
             finishInstallReport()
             logger.error("[AppLinksSDK] Install attribution: \(Self.rejectionCause(statusCode: statusCode, message: message, bundleId: bundleId)) The install won't be reported.")
+            return false
         }
     }
 
@@ -144,7 +153,36 @@ internal actor AttributionManager {
         case .retryLater(let reason):
             logger.warning("[AppLinksSDK] Attribution update failed (\(reason)), it will be retried")
         case .rejected(let statusCode, let message):
-            // Sending the same values again would be refused again
+            logger.error("[AppLinksSDK] Attribution update refused: \(Self.rejectionCause(statusCode: statusCode, message: message, bundleId: deviceInfo.bundleId))")
+            let consentChanges = changes.filter { Self.consentKeys.contains($0.key) }
+            if statusCode == 422, !consentChanges.isEmpty, consentChanges.count < changes.count {
+                // The server refused the whole update for one of the other
+                // fields (the advertising ID or a version): the consent it
+                // came with is sent again without them
+                await updateConsent(id: id, changes: consentChanges, desired: desired, sent: sent)
+            } else {
+                // Sending the same values again would be refused again
+                preferences.sentAttributionFields = desired.sent(after: sent)
+            }
+        }
+    }
+
+    /// Send only the consent of an update refused for another field
+    private func updateConsent(id: String, changes: [String: Any], desired: AttributionFields, sent: AttributionFields) async {
+        // The other fields count as sent: they'd be refused again
+        var withoutConsent = desired.sent(after: sent)
+        withoutConsent.attStatus = sent.attStatus
+        withoutConsent.adsConsent = sent.adsConsent
+        withoutConsent.limitedDataUse = sent.limitedDataUse
+        preferences.sentAttributionFields = withoutConsent
+
+        switch await apiClient.updateAttribution(id: id, body: changes) {
+        case .success:
+            preferences.sentAttributionFields = desired.sent(after: sent)
+            logger.debug("[AppLinksSDK] Attribution updated: \(changes.keys.sorted().joined(separator: ", "))")
+        case .retryLater(let reason):
+            logger.warning("[AppLinksSDK] Attribution update failed (\(reason)), it will be retried")
+        case .rejected(let statusCode, let message):
             preferences.sentAttributionFields = desired.sent(after: sent)
             logger.error("[AppLinksSDK] Attribution update refused: \(Self.rejectionCause(statusCode: statusCode, message: message, bundleId: deviceInfo.bundleId))")
         }
