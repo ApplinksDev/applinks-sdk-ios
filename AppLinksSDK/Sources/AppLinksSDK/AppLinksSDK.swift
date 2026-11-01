@@ -321,7 +321,8 @@ public class AppLinksSDK: ObservableObject {
                 handled: true,
                 originalUrl: url,
                 path: finalContext.deepLinkPath ?? "",
-                params: finalContext.deepLinkParams,
+                // The click ID the link page added is for the install report
+                params: ClickId.removingClickId(from: finalContext.deepLinkParams),
                 metadata: finalContext.additionalData
             )
         }
