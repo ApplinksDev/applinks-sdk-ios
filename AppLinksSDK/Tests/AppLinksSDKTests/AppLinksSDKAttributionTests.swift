@@ -344,4 +344,33 @@ final class AppLinksSDKAttributionTests: XCTestCase {
         let ownCk = await sdk.getAppLinkDetails(from: URL(string: "com.example.app://products/42?ck=summer")!)
         XCTAssertEqual(ownCk.params, ["ck": "summer"])
     }
+
+    func testResolvesAnHttpsClipboardLinkWithoutSupportedDomains() async throws {
+        respondSuccessfully()
+        copy("https://go.acme.test/promo?ck=\(clickId)")
+        let sdk = makeSDK(supportedSchemes: [], deferredDeepLinkingEnabled: false)
+
+        let result = await sdk.checkForDeferredDeepLink()
+
+        XCTAssertEqual(result?.handled, true)
+        XCTAssertEqual(result?.path, "/promo/42")
+        XCTAssertEqual(result?.params, ["ref": "ad"])
+        let retrieve = requests.first { $0.path == "/api/v1/links/retrieve" }
+        XCTAssertEqual(retrieve?.method, "POST")
+        XCTAssertEqual(retrieve?.json["url"] as? String, "https://go.acme.test/promo?ck=\(clickId)")
+
+        try await waitUntil { sdk.attributionId != nil }
+        XCTAssertEqual(attributionRequests[0].json["click_id"] as? String, clickId)
+    }
+
+    func testDoesNotResolveAnHttpsClipboardLinkWithoutClickId() async throws {
+        respondSuccessfully()
+        copy("https://go.acme.test/promo")
+        let sdk = makeSDK(supportedSchemes: [], deferredDeepLinkingEnabled: false, installAttributionEnabled: false)
+
+        let result = await sdk.checkForDeferredDeepLink()
+
+        XCTAssertEqual(result?.path, "")
+        XCTAssertTrue(requests.isEmpty)
+    }
 }

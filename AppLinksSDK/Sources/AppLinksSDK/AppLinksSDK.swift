@@ -320,7 +320,7 @@ public class AppLinksSDK: ObservableObject {
         logger.info("[AppLinksSDK] Deferred deep link found: \(url)")
         
         do {
-            let linkResult = try await processMiddlewareChain(url: url)
+            let linkResult = try await processMiddlewareChain(url: url, chain: deferredDeepLinkChain(for: url))
             return linkResult
         } catch {
             logger.error("[AppLinksSDK] Error processing deferred deep link: \(error)")
@@ -398,14 +398,29 @@ public class AppLinksSDK: ObservableObject {
         subscriberCount = max(0, subscriberCount - 1)
     }
     
+    /// With the project's "https" clipboard format, the link page copies the
+    /// link's own URL with its click ID. It's resolved like a universal link,
+    /// even when its domain isn't one of the supportedDomains.
+    private func deferredDeepLinkChain(for url: URL) -> MiddlewareChain {
+        guard !middlewareChain.canHandle(url: url),
+              let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme),
+              let host = url.host?.lowercased(),
+              ClickId.extract(from: url.absoluteString) != nil else {
+            return middlewareChain
+        }
+        
+        let clipboardLinkMiddleware = UniversalLinkMiddleware(supportedDomains: [host], apiClient: apiClient)
+        return MiddlewareChain(middlewares: middlewareChain.middlewares + [AnyLinkMiddleware(clipboardLinkMiddleware)])
+    }
+    
     // MARK: Middleware chain processing
-    private func processMiddlewareChain(url: URL) async throws -> LinkHandlingResult {
+    private func processMiddlewareChain(url: URL, chain: MiddlewareChain? = nil) async throws -> LinkHandlingResult {
         let context = LinkHandlingContext(
             isFirstLaunch: preferences.isFirstLaunch,
             launchTimestamp: Date()
         )
         
-        let result = try await middlewareChain.execute(
+        let result = try await (chain ?? middlewareChain).execute(
             url: url,
             context: context
         ) { finalUrl, finalContext in
