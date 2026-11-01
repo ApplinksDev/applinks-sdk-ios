@@ -222,7 +222,7 @@ if ATTrackingManager.trackingAuthorizationStatus == .authorized {
 AppLinksSDK.shared.setAdvertisingId(nil)
 ```
 
-The SDK never reads the IDFA itself: your app reads it, only once the user allowed tracking, and passes it. Applinks keeps it only while `att_status` is `authorized` and `ads_consent` is `true`.
+The SDK never reads the IDFA itself: your app reads it, only once the user allowed tracking, and passes it. Applinks keeps it only while `att_status` is `authorized` and `ads_consent` is `true`: it drops it otherwise, and the SDK sends it again once both allow it (for example when the user grants consent after your app set the ID).
 
 ### App Tracking Transparency
 
