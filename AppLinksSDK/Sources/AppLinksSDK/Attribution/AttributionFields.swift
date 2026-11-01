@@ -23,9 +23,17 @@ internal struct AttributionFields: Codable, Equatable {
         return body
     }
 
+    /// Whether the server keeps the advertising ID with these values: it
+    /// drops it unless ATT is authorized and the app's consent allows ad
+    /// measurement (and removes the stored one when they stop allowing it)
+    var keepsAdvertisingId: Bool {
+        attStatus == "authorized" && adsConsent
+    }
+
     /// The fields that changed since `sent` (PATCH). A removed advertising
     /// ID is sent as null; an ATT status or version that can't be read
-    /// isn't sent.
+    /// isn't sent. The advertising ID is sent again when tracking becomes
+    /// allowed: the server dropped it while it wasn't.
     func changes(since sent: AttributionFields) -> [String: Any] {
         var body: [String: Any] = [:]
         if let attStatus = attStatus, attStatus != sent.attStatus {
@@ -37,7 +45,9 @@ internal struct AttributionFields: Codable, Equatable {
         if limitedDataUse != sent.limitedDataUse {
             body["limited_data_use"] = limitedDataUse
         }
-        if advertisingId != sent.advertisingId {
+        let nowKeepsAdvertisingId = self.sent(after: sent).keepsAdvertisingId
+        if advertisingId != sent.advertisingId
+            || (advertisingId != nil && nowKeepsAdvertisingId && !sent.keepsAdvertisingId) {
             body["advertising_id"] = advertisingId ?? NSNull()
         }
         if let appVersion = appVersion, appVersion != sent.appVersion {

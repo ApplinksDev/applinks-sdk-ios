@@ -397,6 +397,92 @@ final class AttributionManagerTests: XCTestCase {
         XCTAssertTrue(requests[1].json["advertising_id"] is NSNull)
     }
 
+    // The server drops the advertising ID while tracking isn't allowed (iOS:
+    // ATT authorized and ads_consent true), so it's sent again once it is.
+
+    func testSendsTheAdvertisingIdAgainWhenConsentIsGrantedAgain() async {
+        respondSuccessfully()
+        reported()
+        deviceInfo.trackingAuthorizationStatus = "authorized"
+        preferences.adsConsent = true
+        preferences.advertisingId = AttributionFixtures.idfa
+        await manager.sync()
+
+        preferences.adsConsent = false
+        await manager.sync()
+        preferences.adsConsent = true
+        await manager.sync()
+
+        XCTAssertEqual(requests.map(\.body), [
+            "{\"ads_consent\":true,\"advertising_id\":\"\(AttributionFixtures.idfa)\",\"att_status\":\"authorized\"}",
+            "{\"ads_consent\":false}",
+            "{\"ads_consent\":true,\"advertising_id\":\"\(AttributionFixtures.idfa)\"}"
+        ])
+    }
+
+    func testSendsTheAdvertisingIdSetBeforeConsentOnceConsentIsGiven() async {
+        respondSuccessfully()
+        reported()
+        deviceInfo.trackingAuthorizationStatus = "authorized"
+        preferences.advertisingId = AttributionFixtures.idfa
+        await manager.sync()
+
+        preferences.adsConsent = true
+        await manager.sync()
+        // Already sent
+        await manager.sync()
+
+        XCTAssertEqual(requests.map(\.body), [
+            "{\"advertising_id\":\"\(AttributionFixtures.idfa)\",\"att_status\":\"authorized\"}",
+            "{\"ads_consent\":true,\"advertising_id\":\"\(AttributionFixtures.idfa)\"}"
+        ])
+    }
+
+    func testSendsTheAdvertisingIdAgainWhenTrackingIsAuthorizedAgain() async {
+        respondSuccessfully()
+        reported()
+        deviceInfo.trackingAuthorizationStatus = "authorized"
+        preferences.adsConsent = true
+        preferences.advertisingId = AttributionFixtures.idfa
+        await manager.sync()
+
+        deviceInfo.trackingAuthorizationStatus = "denied"
+        await manager.sync()
+        deviceInfo.trackingAuthorizationStatus = "authorized"
+        await manager.sync()
+
+        XCTAssertEqual(requests.map(\.body).suffix(2), [
+            "{\"att_status\":\"denied\"}",
+            "{\"advertising_id\":\"\(AttributionFixtures.idfa)\",\"att_status\":\"authorized\"}"
+        ])
+    }
+
+    func testSendsTheAdvertisingIdOfTheInstallReportOnceConsentIsGiven() async {
+        respondSuccessfully()
+        lookupDone()
+        deviceInfo.trackingAuthorizationStatus = "authorized"
+        preferences.advertisingId = AttributionFixtures.idfa
+        await manager.sync()
+        XCTAssertEqual(requests.first?.json["advertising_id"] as? String, AttributionFixtures.idfa)
+
+        preferences.adsConsent = true
+        await manager.sync()
+
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(requests[1].body, "{\"ads_consent\":true,\"advertising_id\":\"\(AttributionFixtures.idfa)\"}")
+    }
+
+    func testGrantingConsentWithoutAnAdvertisingIdSendsOnlyTheConsent() async {
+        respondSuccessfully()
+        reported()
+        deviceInfo.trackingAuthorizationStatus = "authorized"
+        preferences.adsConsent = true
+
+        await manager.sync()
+
+        XCTAssertEqual(requests.map(\.body), ["{\"ads_consent\":true,\"att_status\":\"authorized\"}"])
+    }
+
     func testSendsAnAppOrOSUpdate() async {
         respondSuccessfully()
         reported()
