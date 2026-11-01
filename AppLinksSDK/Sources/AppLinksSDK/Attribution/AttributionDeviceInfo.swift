@@ -39,15 +39,22 @@ internal struct SystemAttributionDeviceInfo: AttributionDeviceInfo {
     /// Reads the status, never requests authorization (that's the app's call)
     var trackingAuthorizationStatus: String? {
         #if canImport(AppTrackingTransparency)
-        switch ATTrackingManager.trackingAuthorizationStatus {
+        return Self.attStatus(ATTrackingManager.trackingAuthorizationStatus)
+        #else
+        return nil
+        #endif
+    }
+
+    #if canImport(AppTrackingTransparency)
+    /// The server's name for an ATT status
+    static func attStatus(_ status: ATTrackingManager.AuthorizationStatus) -> String? {
+        switch status {
         case .authorized: return "authorized"
         case .denied: return "denied"
         case .restricted: return "restricted"
         case .notDetermined: return "not_determined"
         @unknown default: return nil
         }
-        #else
-        return nil
-        #endif
     }
+    #endif
 }

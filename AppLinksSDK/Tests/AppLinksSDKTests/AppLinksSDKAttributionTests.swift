@@ -1,5 +1,9 @@
 import XCTest
 import UIKit
+import Combine
+#if canImport(AppTrackingTransparency)
+import AppTrackingTransparency
+#endif
 @testable import AppLinksSDK
 
 /// Install attribution as the SDK drives it: when the install is reported,
@@ -340,6 +344,72 @@ final class AppLinksSDKAttributionTests: XCTestCase {
         try await waitUntil { self.attributionRequests.count == 2 }
 
         XCTAssertEqual(attributionRequests[1].body, "{\"app_version\":\"2.4.0\"}")
+    }
+
+    // MARK: - ATT
+
+    #if canImport(AppTrackingTransparency)
+    func testMapsTheATTStatusToTheServersNames() {
+        XCTAssertEqual(SystemAttributionDeviceInfo.attStatus(.authorized), "authorized")
+        XCTAssertEqual(SystemAttributionDeviceInfo.attStatus(.denied), "denied")
+        XCTAssertEqual(SystemAttributionDeviceInfo.attStatus(.restricted), "restricted")
+        XCTAssertEqual(SystemAttributionDeviceInfo.attStatus(.notDetermined), "not_determined")
+    }
+    #endif
+
+    func testReadsTheATTStatusWithoutRequestingIt() {
+        // The real status, read without showing a prompt the test runner couldn't answer
+        let status = SystemAttributionDeviceInfo().trackingAuthorizationStatus
+        XCTAssertTrue(["authorized", "denied", "restricted", "not_determined"].contains(status ?? ""), "\(status ?? "nil")")
+    }
+
+    // MARK: - Deep link delivery
+
+    /// The server answers links right away, and attributions slowly, with an error
+    private func respondSlowlyToAttributions() {
+        MockURLProtocol.respond(host: host) { request in
+            if request.path == "/api/v1/links/retrieve" {
+                return Stub(status: 200, body: AttributionFixtures.linkResponse)
+            }
+            return Stub(status: 503, delay: 3)
+        }
+    }
+
+    func testTheManualLookupDoesNotWaitForTheInstallReport() async throws {
+        respondSlowlyToAttributions()
+        copy("https://go.acme.test/promo?ck=\(clickId)")
+        let sdk = makeSDK(supportedSchemes: [], deferredDeepLinkingEnabled: false)
+
+        let started = Date()
+        let result = await sdk.checkForDeferredDeepLink()
+
+        XCTAssertEqual(result?.path, "/promo/42")
+        XCTAssertEqual(result?.params, ["ref": "ad"])
+        XCTAssertLessThan(Date().timeIntervalSince(started), 2)
+        try await waitUntil { self.attributionRequests.count == 1 }
+        XCTAssertNil(sdk.attributionId)
+    }
+
+    func testTheFirstLaunchLinkIsDeliveredWithoutWaitingForTheInstallReport() async throws {
+        respondSlowlyToAttributions()
+        copy("com.example.app://products/42?ref=ad&ck=\(clickId)")
+
+        let started = Date()
+        let sdk = makeSDK()
+        let delivered = expectation(description: "The deferred deep link is delivered")
+        var deliveredAfter: TimeInterval?
+        let subscription = sdk.linkPublisher.sink { result in
+            XCTAssertEqual(result.path, "/products/42")
+            XCTAssertEqual(result.params, ["ref": "ad"])
+            deliveredAfter = Date().timeIntervalSince(started)
+            delivered.fulfill()
+        }
+        await fulfillment(of: [delivered], timeout: 2)
+        subscription.cancel()
+
+        XCTAssertLessThan(deliveredAfter ?? .infinity, 2)
+        XCTAssertNil(sdk.attributionId)
+        try await waitUntil { self.attributionRequests.count == 1 }
     }
 
     // MARK: - Links
