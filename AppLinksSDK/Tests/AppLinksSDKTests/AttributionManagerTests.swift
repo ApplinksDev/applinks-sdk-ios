@@ -151,6 +151,84 @@ final class AttributionManagerTests: XCTestCase {
 
         XCTAssertEqual(preferences.attributionId, attributionId)
         XCTAssertFalse(preferences.installReportDue)
+        XCTAssertFalse(preferences.installReportSent)
+        // Reported first by another device the click ID reached: its stricter
+        // choice isn't overridden
+        XCTAssertEqual(requests.map(\.method), ["POST"])
+        XCTAssertEqual(preferences.sentAttributionFields?.adsConsent, false)
+    }
+
+    func testARetriedReportAnsweredAsAlreadyReportedSendsWhatTheUserAllowedSince() async {
+        // The first report reached the server, but its answer was lost
+        respond { _ in Stub(error: URLError(.timedOut)) }
+        lookupDone()
+        await manager.sync()
+        XCTAssertTrue(preferences.installReportSent)
+
+        // Before the next launch, the user allowed tracking and ad measurement
+        deviceInfo.trackingAuthorizationStatus = "authorized"
+        preferences.adsConsent = true
+        preferences.advertisingId = AttributionFixtures.idfa
+
+        // The retry gets the install recorded first, with only its stricter values
+        respond { _ in Stub(status: 200, body: AttributionFixtures.attributionResponse(matched: true)) }
+        manager = makeManager()
+        await manager.sync()
+
+        XCTAssertEqual(requests.map(\.method), ["POST", "POST", "PATCH"])
+        XCTAssertEqual(requests[1].json["ads_consent"] as? Bool, true)
+        XCTAssertEqual(requests[2].path, "/api/v1/attributions/\(attributionId)")
+        XCTAssertEqual(
+            requests[2].body,
+            "{\"ads_consent\":true,\"advertising_id\":\"\(AttributionFixtures.idfa)\",\"app_version\":\"2.3.1\","
+            + "\"att_status\":\"authorized\",\"limited_data_use\":false,\"os_version\":\"17.5.1\"}"
+        )
+        XCTAssertEqual(preferences.attributionId, attributionId)
+        XCTAssertFalse(preferences.installReportSent)
+
+        // Then only changes
+        await manager.sync()
+        XCTAssertEqual(requests.count, 3)
+    }
+
+    func testARetriedReportAnsweredAsAlreadyReportedRemovesTheFirstReportsAdvertisingId() async {
+        respond { _ in Stub(status: 503) }
+        lookupDone()
+        deviceInfo.trackingAuthorizationStatus = "authorized"
+        preferences.adsConsent = true
+        preferences.advertisingId = AttributionFixtures.idfa
+        await manager.sync()
+
+        // The app removed the ID before the retry
+        preferences.advertisingId = nil
+        respond { _ in Stub(status: 200, body: AttributionFixtures.attributionResponse()) }
+        manager = makeManager()
+        await manager.sync()
+
+        XCTAssertEqual(requests.map(\.method), ["POST", "POST", "PATCH"])
+        XCTAssertEqual(
+            requests[2].body,
+            "{\"ads_consent\":true,\"advertising_id\":null,\"app_version\":\"2.3.1\","
+            + "\"att_status\":\"authorized\",\"limited_data_use\":false,\"os_version\":\"17.5.1\"}"
+        )
+    }
+
+    func testARetriedReportAnsweredAsAlreadyReportedKeepsTheStricterValues() async {
+        respond { _ in Stub(error: URLError(.networkConnectionLost)) }
+        lookupDone()
+        preferences.limitedDataUse = true
+        await manager.sync()
+
+        respond { _ in Stub(status: 200, body: AttributionFixtures.attributionResponse()) }
+        manager = makeManager()
+        await manager.sync()
+
+        // No consent and limited data use: what the repeat applied, not sent again
+        XCTAssertEqual(requests.map(\.method), ["POST", "POST", "PATCH"])
+        XCTAssertEqual(
+            requests[2].body,
+            "{\"advertising_id\":null,\"app_version\":\"2.3.1\",\"att_status\":\"not_determined\",\"os_version\":\"17.5.1\"}"
+        )
     }
 
     func testWaitsForTheLookup() async throws {

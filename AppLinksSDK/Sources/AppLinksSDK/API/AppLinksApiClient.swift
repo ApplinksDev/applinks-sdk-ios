@@ -119,7 +119,7 @@ internal class AppLinksApiClient {
                 guard let attribution = try? jsonDecoder.decode(AttributionResponse.self, from: data) else {
                     return .retryLater("Invalid server response")
                 }
-                return .success(attributionId: attribution.attributionId)
+                return .success(attributionId: attribution.attributionId, created: status == 201)
             case 408, 429, 500...599:
                 return .retryLater(message ?? "Server error: \(status)")
             default:

@@ -10,6 +10,20 @@ internal struct AttributionFields: Codable, Equatable {
     var appVersion: String?
     var osVersion: String?
 
+    /// What the server surely has after it answered a repeated install
+    /// report with the install it recorded first (200): it applies only the
+    /// repeat's stricter consent, and keeps its own advertising ID and
+    /// versions. Every field that allows more is then sent again, and the
+    /// advertising ID too (as null when the app has none).
+    static let afterRepeatedReport = AttributionFields(
+        attStatus: nil,
+        adsConsent: false,
+        limitedDataUse: true,
+        advertisingId: "",
+        appVersion: nil,
+        osVersion: nil
+    )
+
     /// The fields of the install report (POST), unset ones left out
     var installReportBody: [String: Any] {
         var body: [String: Any] = [

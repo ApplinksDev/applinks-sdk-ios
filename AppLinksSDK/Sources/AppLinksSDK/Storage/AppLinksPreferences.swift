@@ -10,6 +10,7 @@ internal class AppLinksPreferences: @unchecked Sendable {
     private let keyInstallReportDue = "install_report_due"
     private let keyInstallLookupCompleted = "install_lookup_completed"
     private let keyPendingClickId = "pending_click_id"
+    private let keyInstallReportSent = "install_report_sent"
     private let keyAttributionId = "attribution_id"
     private let keyAdsConsent = "ads_consent"
     private let keyLimitedDataUse = "limited_data_use"
@@ -56,6 +57,13 @@ internal class AppLinksPreferences: @unchecked Sendable {
     var pendingClickId: String? {
         get { defaults.string(forKey: keyPendingClickId) }
         set { defaults.set(newValue, forKey: keyPendingClickId) }
+    }
+    
+    /// Whether the install report was sent before without an answer (a
+    /// timeout, a lost connection): the server may have recorded it
+    var installReportSent: Bool {
+        get { defaults.bool(forKey: keyInstallReportSent) }
+        set { defaults.set(newValue, forKey: keyInstallReportSent) }
     }
     
     /// The attribution the server recorded for this install

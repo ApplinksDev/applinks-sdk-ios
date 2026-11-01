@@ -59,11 +59,16 @@ internal actor AttributionManager {
     // MARK: - Sync
 
     private func performSync() async {
-        let desired = desiredFields()
+        if preferences.attributionId == nil {
+            guard preferences.installReportDue, preferences.installLookupCompleted, !installReportDeferred else {
+                return
+            }
+            await reportInstall(desired: desiredFields())
+        }
+        // Also right after the report: a change made while it was in flight,
+        // or what a repeated report didn't apply
         if let attributionId = preferences.attributionId {
-            await updateAttribution(id: attributionId, desired: desired)
-        } else if preferences.installReportDue, preferences.installLookupCompleted, !installReportDeferred {
-            await reportInstall(desired: desired)
+            await updateAttribution(id: attributionId, desired: desiredFields())
         }
     }
 
@@ -91,10 +96,25 @@ internal actor AttributionManager {
         body["bundle_id"] = bundleId
         body["click_id"] = preferences.pendingClickId
 
+        // A report sent before without an answer may have been recorded
+        let sentBefore = preferences.installReportSent
+        preferences.installReportSent = true
+
         switch await apiClient.reportInstall(body: body) {
-        case .success(let attributionId):
+        case .success(let attributionId, let created):
             preferences.attributionId = attributionId
-            preferences.sentAttributionFields = desired
+            // The server answers a repeat (200) with the install it recorded
+            // first, taking only the repeat's stricter consent. When this
+            // device sent that first report, the user allowed more since, so
+            // the update that follows sends it. Otherwise the install was
+            // reported by another device the click ID reached (the clipboard
+            // syncs across the user's Apple devices), whose choice isn't
+            // overridden.
+            if !created && sentBefore {
+                preferences.sentAttributionFields = .afterRepeatedReport
+            } else {
+                preferences.sentAttributionFields = desired
+            }
             finishInstallReport()
             logger.info("[AppLinksSDK] Install reported: attribution \(attributionId)")
         case .retryLater(let reason):
@@ -108,6 +128,7 @@ internal actor AttributionManager {
 
     private func finishInstallReport() {
         preferences.installReportDue = false
+        preferences.installReportSent = false
         preferences.pendingClickId = nil
     }
 

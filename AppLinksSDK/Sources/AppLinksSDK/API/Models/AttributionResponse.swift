@@ -13,8 +13,8 @@ internal struct AttributionResponse: Decodable {
 
 /// Outcome of an attribution request
 internal enum AttributionApiResult: Equatable {
-    /// 201, or 200 (already reported, or updated)
-    case success(attributionId: String)
+    /// 201 (`created`), or 200 (already reported, or updated)
+    case success(attributionId: String, created: Bool)
     /// Network error, timeout, 5xx, 408 or 429: worth trying again later
     case retryLater(String)
     /// Any other answer: trying again would get the same one
