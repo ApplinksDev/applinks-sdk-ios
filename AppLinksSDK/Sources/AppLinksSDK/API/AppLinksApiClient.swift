@@ -24,15 +24,21 @@ internal class AppLinksApiClient {
         return decoder
     }()
     
-    init(serverUrl: String, apiKey: String?) {
+    /// - Parameter session: the session requests go through; tests pass one
+    ///   whose requests are stubbed
+    init(serverUrl: String, apiKey: String?, session: URLSession? = nil) {
         self.serverUrl = serverUrl
         self.apiKey = apiKey
         
-        // Configure URLSession
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = readTimeout
-        config.timeoutIntervalForResource = connectTimeout + readTimeout
-        self.session = URLSession(configuration: config)
+        if let session = session {
+            self.session = session
+        } else {
+            // Configure URLSession
+            let config = URLSessionConfiguration.default
+            config.timeoutIntervalForRequest = readTimeout
+            config.timeoutIntervalForResource = connectTimeout + readTimeout
+            self.session = URLSession(configuration: config)
+        }
     }
     
     // MARK: - Public Methods
@@ -69,7 +75,62 @@ internal class AppLinksApiClient {
         return try await executeRequest(request, resourceType: "link")
     }
     
+    /// Report the install (POST /api/v1/attributions)
+    func reportInstall(body: [String: Any]) async -> AttributionApiResult {
+        let url = URL(string: "\(serverUrl)/api/v1/attributions")!
+        return await sendAttributionRequest(url: url, method: "POST", body: body)
+    }
+    
+    /// Update the install's consent or versions (PATCH /api/v1/attributions/:id)
+    func updateAttribution(id: String, body: [String: Any]) async -> AttributionApiResult {
+        let path = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        let url = URL(string: "\(serverUrl)/api/v1/attributions/\(path)")!
+        return await sendAttributionRequest(url: url, method: "PATCH", body: body)
+    }
+    
     // MARK: - Private Methods
+    
+    /// The attribution bodies are built as dictionaries: a PATCH sends
+    /// `"advertising_id": null` to remove the advertising ID, which
+    /// JSONEncoder can't tell apart from a field left out.
+    private func sendAttributionRequest(url: URL, method: String, body: [String: Any]) async -> AttributionApiResult {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue(AppLinksSDKVersion.userAgent, forHTTPHeaderField: "User-Agent")
+        request.addValue(AppLinksSDKVersion.current, forHTTPHeaderField: "X-AppLinks-SDK-Version")
+        if let apiKey = apiKey {
+            request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+            let (data, response) = try await session.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                return .retryLater("Invalid server response")
+            }
+            logger.debug("[AppLinksSDK] \(method) \(url.path) response code: \(httpResponse.statusCode)")
+            
+            let status = httpResponse.statusCode
+            let message = (try? jsonDecoder.decode(ErrorResponse.self, from: data))?.error.message
+            switch status {
+            case 200, 201:
+                guard let attribution = try? jsonDecoder.decode(AttributionResponse.self, from: data) else {
+                    return .retryLater("Invalid server response")
+                }
+                return .success(attributionId: attribution.attributionId, created: status == 201)
+            case 408, 429, 500...599:
+                return .retryLater(message ?? "Server error: \(status)")
+            default:
+                return .rejected(statusCode: status, message: message ?? "Server error: \(status)")
+            }
+        } catch {
+            logger.debug("[AppLinksSDK] Network error: \(error)")
+            return .retryLater(error.localizedDescription)
+        }
+    }
+    
     
     private func buildRequest(url: URL) -> URLRequest {
         var request = URLRequest(url: url)

@@ -19,7 +19,7 @@ Pod::Spec.new do |spec|
   
   spec.source_files = 'AppLinksSDK/Sources/AppLinksSDK/**/*.swift'
   
-  spec.frameworks = 'UIKit', 'Foundation'
+  spec.frameworks = 'UIKit', 'Foundation', 'AppTrackingTransparency'
   
   spec.requires_arc = true
 end

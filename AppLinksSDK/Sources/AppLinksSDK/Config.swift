@@ -23,6 +23,10 @@ public struct AppLinksConfig {
     /// Enable automatic deferred deep link checking on first launch
     public let deferredDeepLinkingEnabled: Bool
     
+    /// Report the install on first launch, so it's credited to the link that
+    /// sent the user to the App Store, and keep its consent up to date
+    public let installAttributionEnabled: Bool
+    
     /// Default configuration
     public init(
         autoHandleLinks: Bool = true,
@@ -31,7 +35,8 @@ public struct AppLinksConfig {
         apiKey: String? = nil,
         supportedDomains: Set<String> = [],
         supportedSchemes: Set<String> = [],
-        deferredDeepLinkingEnabled: Bool = true
+        deferredDeepLinkingEnabled: Bool = true,
+        installAttributionEnabled: Bool = true
     ) {
         self.autoHandleLinks = autoHandleLinks
         self.logLevel = logLevel
@@ -40,5 +45,6 @@ public struct AppLinksConfig {
         self.supportedDomains = supportedDomains
         self.supportedSchemes = supportedSchemes
         self.deferredDeepLinkingEnabled = deferredDeepLinkingEnabled
+        self.installAttributionEnabled = installAttributionEnabled
     }
 }

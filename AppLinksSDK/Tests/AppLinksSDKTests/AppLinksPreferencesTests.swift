@@ -62,4 +62,41 @@ final class AppLinksPreferencesTests: XCTestCase {
         XCTAssertFalse(preferences.isFirstLaunchCompleted)
         XCTAssertTrue(preferences.isFirstLaunch)
     }
+
+    // MARK: - Consent
+    
+    func testSetConsent() {
+        preferences.setConsent(adsConsent: true, limitedDataUse: true)
+        XCTAssertTrue(preferences.consent.adsConsent)
+        XCTAssertTrue(preferences.consent.limitedDataUse)
+        
+        preferences.setConsent(adsConsent: true, limitedDataUse: false)
+        XCTAssertTrue(preferences.adsConsent)
+        XCTAssertFalse(preferences.limitedDataUse)
+    }
+    
+    func testConsentIsReadAsSetTogether() {
+        let preferences = self.preferences!
+        preferences.setConsent(adsConsent: false, limitedDataUse: false)
+        
+        let lock = NSLock()
+        var mixed = 0
+        DispatchQueue.concurrentPerform(iterations: 2) { index in
+            for step in 0..<500 {
+                if index == 0 {
+                    let value = step % 2 == 0
+                    preferences.setConsent(adsConsent: value, limitedDataUse: value)
+                } else {
+                    let consent = preferences.consent
+                    if consent.adsConsent != consent.limitedDataUse {
+                        lock.lock()
+                        mixed += 1
+                        lock.unlock()
+                    }
+                }
+            }
+        }
+        
+        XCTAssertEqual(mixed, 0)
+    }
 }

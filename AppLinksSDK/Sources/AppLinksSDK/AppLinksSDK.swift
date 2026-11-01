@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UIKit
 
 /// Main SDK class for AppLinks functionality
 public class AppLinksSDK: ObservableObject {
@@ -44,29 +45,60 @@ public class AppLinksSDK: ObservableObject {
     private let clipboardManager: ClipboardManager
     private let customMiddleware: [AnyLinkMiddleware]
     private let logger: AppLinksSDKLogger
+    private let attributionManager: AttributionManager?
+    private let notificationCenter: NotificationCenter
+    private var didBecomeActiveObserver: NSObjectProtocol?
     
     /// Public API for creating shortened links
     public lazy var linkShortener: LinkShortener = LinkShortener(apiClient: apiClient)
 
     // MARK: - Initialization
     
-    private init(config: AppLinksConfig, customMiddleware: [AnyLinkMiddleware]) {
+    /// The dependencies can be replaced for tests
+    internal init(
+        config: AppLinksConfig,
+        customMiddleware: [AnyLinkMiddleware],
+        preferences: AppLinksPreferences = AppLinksPreferences(),
+        clipboardManager: ClipboardManager = ClipboardManager(),
+        urlSession: URLSession? = nil,
+        attributionDeviceInfo: AttributionDeviceInfo = SystemAttributionDeviceInfo(),
+        notificationCenter: NotificationCenter = .default
+    ) {
         self.config = config
         self.customMiddleware = customMiddleware
         
         // Initialize components
         self.apiClient = AppLinksApiClient(
             serverUrl: config.serverUrl,
-            apiKey: config.apiKey
+            apiKey: config.apiKey,
+            session: urlSession
         )
         
-        self.preferences = AppLinksPreferences()
+        self.preferences = preferences
         self.middlewareChain = MiddlewareChain(middlewares: [])
-        self.clipboardManager = ClipboardManager()
+        self.clipboardManager = clipboardManager
         self.logger = AppLinksSDKLogger.shared.withCategory("core")
+        self.notificationCenter = notificationCenter
+        
+        if config.installAttributionEnabled, let apiKey = config.apiKey, !apiKey.isEmpty {
+            self.attributionManager = AttributionManager(
+                apiClient: apiClient,
+                preferences: preferences,
+                deviceInfo: attributionDeviceInfo
+            )
+        } else {
+            self.attributionManager = nil
+        }
         
         setupMiddleware()
+        setupInstallAttribution()
         checkForDeferredDeepLinkIfFirstLaunch()
+    }
+    
+    deinit {
+        if let observer = didBecomeActiveObserver {
+            notificationCenter.removeObserver(observer)
+        }
     }
     
     /// Initialize the SDK with named parameters
@@ -79,7 +111,8 @@ public class AppLinksSDK: ObservableObject {
         supportedSchemes: Set<String> = [],
         logLevel: AppLinksSDKLogLevel = .info,
         customMiddleware: [AnyLinkMiddleware] = [],
-        deferredDeepLinkingEnabled: Bool = true
+        deferredDeepLinkingEnabled: Bool = true,
+        installAttributionEnabled: Bool = true
     ) -> AppLinksSDK {
         // Validate API key format
         if apiKey.hasPrefix("sk_") {
@@ -101,7 +134,8 @@ public class AppLinksSDK: ObservableObject {
             apiKey: apiKey,
             supportedDomains: supportedDomains,
             supportedSchemes: supportedSchemes,
-            deferredDeepLinkingEnabled: deferredDeepLinkingEnabled
+            deferredDeepLinkingEnabled: deferredDeepLinkingEnabled,
+            installAttributionEnabled: installAttributionEnabled
         )
         
         AppLinksSDKLogger.shared.logLevel = logLevel
@@ -142,6 +176,29 @@ public class AppLinksSDK: ObservableObject {
         
         // Update the middleware chain
         middlewareChain = MiddlewareChain(middlewares: middlewares)
+    }
+    
+    private func setupInstallAttribution() {
+        guard let attributionManager = attributionManager else { return }
+        
+        // A fresh install: it's reported after the first deferred deep link
+        // lookup. Kept apart from the first launch flag, which is set before
+        // the report is sent.
+        if preferences.isFirstLaunch && preferences.attributionId == nil {
+            preferences.installReportDue = true
+        }
+        
+        // Retry a report that failed, send an app or OS update
+        attributionManager.trigger()
+        
+        // The user may have changed their tracking choice (the ATT prompt, or Settings)
+        didBecomeActiveObserver = notificationCenter.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: nil
+        ) { _ in
+            attributionManager.trigger()
+        }
     }
     
     // MARK: - Public Methods
@@ -200,6 +257,44 @@ public class AppLinksSDK: ObservableObject {
         middlewareChain = MiddlewareChain(middlewares: currentMiddlewares)
     }
     
+    // MARK: - Install Attribution
+    
+    /// The attribution Applinks recorded for this install, nil until the
+    /// install was reported. Pass it to your backend, which reports the
+    /// user's conversions with POST /api/v1/conversions and its private key.
+    public var attributionId: String? {
+        preferences.attributionId
+    }
+    
+    /// Set the user's consent to ad measurement. Call it whenever your app's
+    /// consent prompt or privacy settings change it. Until it's called, the
+    /// install is reported without consent, so nothing is sent to ad networks.
+    /// - Parameters:
+    ///   - adsConsent: Whether your consent prompt allowed ad measurement
+    ///     (true where no prompt is required)
+    ///   - limitedDataUse: Whether the user opted out of sharing under US
+    ///     state privacy laws
+    public func updateConsent(adsConsent: Bool, limitedDataUse: Bool = false) {
+        preferences.setConsent(adsConsent: adsConsent, limitedDataUse: limitedDataUse)
+        attributionManager?.trigger()
+    }
+    
+    /// Set the IDFA, which your app reads itself, only once the user allowed
+    /// tracking. The SDK never reads it. Pass nil to remove it. A value that
+    /// isn't an IDFA (a UUID) is ignored; the zeroed ID counts as none.
+    public func setAdvertisingId(_ advertisingId: String?) {
+        switch AdvertisingId.parse(advertisingId) {
+        case .none:
+            preferences.advertisingId = nil
+        case .id(let id):
+            preferences.advertisingId = id
+        case .invalid:
+            logger.error("[AppLinksSDK] setAdvertisingId: the value isn't an IDFA, it's ignored. Pass ASIdentifierManager.shared().advertisingIdentifier.uuidString.")
+            return
+        }
+        attributionManager?.trigger()
+    }
+    
     /// Get SDK version information
     public static var version: String {
         return AppLinksSDKVersion.current
@@ -216,6 +311,10 @@ public class AppLinksSDK: ObservableObject {
     private func processDeferredDeepLink(markFirstLaunch: Bool) async -> LinkHandlingResult? {
         let result = await clipboardManager.retrieveDeferredDeepLink()
         
+        // The install report waits for this lookup. It's sent alongside the
+        // deep link, which doesn't wait for it.
+        attributionManager?.recordInstallLookup(url: result.url)
+        
         if markFirstLaunch {
             preferences.markFirstLaunchCompleted()
         }
@@ -228,7 +327,7 @@ public class AppLinksSDK: ObservableObject {
         logger.info("[AppLinksSDK] Deferred deep link found: \(url)")
         
         do {
-            let linkResult = try await processMiddlewareChain(url: url)
+            let linkResult = try await processMiddlewareChain(url: url, chain: deferredDeepLinkChain(for: url))
             return linkResult
         } catch {
             logger.error("[AppLinksSDK] Error processing deferred deep link: \(error)")
@@ -306,14 +405,29 @@ public class AppLinksSDK: ObservableObject {
         subscriberCount = max(0, subscriberCount - 1)
     }
     
+    /// With the project's "https" clipboard format, the link page copies the
+    /// link's own URL with its click ID. It's resolved like a universal link,
+    /// even when its domain isn't one of the supportedDomains.
+    private func deferredDeepLinkChain(for url: URL) -> MiddlewareChain {
+        guard !middlewareChain.canHandle(url: url),
+              let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme),
+              let host = url.host?.lowercased(),
+              ClickId.extract(from: url.absoluteString) != nil else {
+            return middlewareChain
+        }
+        
+        let clipboardLinkMiddleware = UniversalLinkMiddleware(supportedDomains: [host], apiClient: apiClient)
+        return MiddlewareChain(middlewares: middlewareChain.middlewares + [AnyLinkMiddleware(clipboardLinkMiddleware)])
+    }
+    
     // MARK: Middleware chain processing
-    private func processMiddlewareChain(url: URL) async throws -> LinkHandlingResult {
+    private func processMiddlewareChain(url: URL, chain: MiddlewareChain? = nil) async throws -> LinkHandlingResult {
         let context = LinkHandlingContext(
             isFirstLaunch: preferences.isFirstLaunch,
             launchTimestamp: Date()
         )
         
-        let result = try await middlewareChain.execute(
+        let result = try await (chain ?? middlewareChain).execute(
             url: url,
             context: context
         ) { finalUrl, finalContext in
@@ -321,7 +435,8 @@ public class AppLinksSDK: ObservableObject {
                 handled: true,
                 originalUrl: url,
                 path: finalContext.deepLinkPath ?? "",
-                params: finalContext.deepLinkParams,
+                // The click ID the link page added is for the install report
+                params: ClickId.removingClickId(from: finalContext.deepLinkParams),
                 metadata: finalContext.additionalData
             )
         }
