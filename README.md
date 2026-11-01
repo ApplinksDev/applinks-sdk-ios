@@ -177,9 +177,13 @@ Once per new install, right after the first deferred deep link lookup (the autom
 | `advertising_id` | What your app passed to `setAdvertisingId`, if anything |
 | `app_version`, `os_version` | Your app's version and the iOS version |
 
-Only the click ID is read from the clipboard link: the link itself never leaves the device. An install without a click ID is reported as unmatched. Deep link delivery doesn't wait for the report.
+The report carries only the click ID, never the clipboard link. (To open the right screen, the SDK resolves a copied `https` link with `POST /api/v1/links/retrieve`, as it does for universal links: see the note on the clipboard format below.) An install without a click ID is reported as unmatched. Deep link delivery doesn't wait for the report.
 
 A report that fails on the network or with a server error is sent again at the next launch. A refused one is logged and not sent again: `404 App not found` means the app's bundle ID isn't the iOS bundle ID of an Applinks project, `401` that the API key is wrong. Apps updated from an SDK version without install attribution don't report: they aren't new installs.
+
+A report without a click ID whose answer is lost (a timeout, the app suspended mid-request) can't be recognised when it's sent again, so that install may be counted twice in the project's unmatched installs. Installs credited to a link are never counted twice.
+
+> **Adding the SDK to an app that already has users:** the first launch of that update looks like a new install to the SDK, so every existing user would be reported as an unmatched install. When your app can tell the user installed it before (for example from data it stored earlier), pass `installAttributionEnabled: false` on that launch: the install is then never reported, even on later launches with attribution turned on.
 
 Afterwards, when the consent, the advertising ID, the ATT status, the app version or the iOS version changes, the SDK sends only what changed with `PATCH /api/v1/attributions/<attributionId>`.
 
@@ -194,7 +198,7 @@ if let attributionId = AppLinksSDK.shared.attributionId {
 }
 ```
 
-`attributionId` is `nil` until the install was reported. Your backend stores it with the user and reports their conversions with `POST /api/v1/conversions` and your **private** key (`sk_`). Never call the conversions endpoint from the app: the public key ships inside it.
+`attributionId` is `nil` until the install was reported, which happens in the background a moment after the first deferred deep link lookup, or at a later launch when the report failed. On a fresh install it's usually still `nil` right after `initialize`, so don't read it only once at startup: read it when you send the user's data to your backend (at sign-up, sign-in or each launch) and send it once it's set. Your backend stores it with the user and reports their conversions with `POST /api/v1/conversions` and your **private** key (`sk_`). Never call the conversions endpoint from the app: the public key ships inside it.
 
 ### Consent
 
@@ -222,7 +226,7 @@ if ATTrackingManager.trackingAuthorizationStatus == .authorized {
 AppLinksSDK.shared.setAdvertisingId(nil)
 ```
 
-The SDK never reads the IDFA itself: your app reads it, only once the user allowed tracking, and passes it. Applinks keeps it only while `att_status` is `authorized` and `ads_consent` is `true`: it drops it otherwise, and the SDK sends it again once both allow it (for example when the user grants consent after your app set the ID).
+The SDK never reads the IDFA itself: your app reads it, only once the user allowed tracking, and passes it. A value that isn't an IDFA (a UUID) is ignored and logged, and the zeroed ID iOS returns without authorization counts as none. Applinks keeps it only while `att_status` is `authorized` and `ads_consent` is `true`: it drops it otherwise, and the SDK sends it again once both allow it (for example when the user grants consent after your app set the ID).
 
 ### App Tracking Transparency
 
