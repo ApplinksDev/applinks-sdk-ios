@@ -13,6 +13,9 @@ internal actor AttributionManager {
     private let deviceInfo: AttributionDeviceInfo
     private let logger = AppLinksSDKLogger.shared.withCategory("attribution")
 
+    /// Makes recording the install lookup one step
+    private let lookupLock = NSLock()
+
     /// The last sync started, which the next one waits for
     private var lastSync: Task<Void, Never>?
 
@@ -35,14 +38,21 @@ internal actor AttributionManager {
 
     /// Record the result of the deferred deep link lookup the install report
     /// waits for, then report the install. Only the first lookup of a fresh
-    /// install counts. Only the click ID is kept, nothing else of the URL.
-    nonisolated func recordInstallLookup(url: URL?) {
+    /// install counts, even when lookups run at the same time (the automatic
+    /// one and the app's). Only the click ID is kept, nothing else of the URL.
+    /// - Returns: whether this lookup was the one recorded
+    @discardableResult
+    nonisolated func recordInstallLookup(url: URL?) -> Bool {
+        lookupLock.lock()
         guard preferences.installReportDue, !preferences.installLookupCompleted else {
-            return
+            lookupLock.unlock()
+            return false
         }
         preferences.pendingClickId = url.flatMap { ClickId.extract(from: $0.absoluteString) }
         preferences.installLookupCompleted = true
+        lookupLock.unlock()
         trigger()
+        return true
     }
 
     /// Sync, after the syncs already started
@@ -73,10 +83,11 @@ internal actor AttributionManager {
     /// What the server should have: the app's consent and advertising ID,
     /// and the ATT status and versions read now
     private func desiredFields() -> AttributionFields {
-        AttributionFields(
+        let consent = preferences.consent
+        return AttributionFields(
             attStatus: deviceInfo.trackingAuthorizationStatus,
-            adsConsent: preferences.adsConsent,
-            limitedDataUse: preferences.limitedDataUse,
+            adsConsent: consent.adsConsent,
+            limitedDataUse: consent.limitedDataUse,
             advertisingId: preferences.advertisingId,
             appVersion: deviceInfo.appVersion.map(Self.capped),
             osVersion: deviceInfo.osVersion.map(Self.capped)

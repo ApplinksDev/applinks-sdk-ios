@@ -4,6 +4,8 @@ import Foundation
 internal class AppLinksPreferences: @unchecked Sendable {
     private let suiteName: String
     private let defaults: UserDefaults
+    /// Makes the consent's two flags one value
+    private let consentLock = NSLock()
     
     // Keys
     private let keyFirstLaunchCompleted = "first_launch_completed"
@@ -81,6 +83,22 @@ internal class AppLinksPreferences: @unchecked Sendable {
     var limitedDataUse: Bool {
         get { defaults.bool(forKey: keyLimitedDataUse) }
         set { defaults.set(newValue, forKey: keyLimitedDataUse) }
+    }
+    
+    /// Both consent flags, read together: never the new consent with the
+    /// old limited data use
+    var consent: (adsConsent: Bool, limitedDataUse: Bool) {
+        consentLock.lock()
+        defer { consentLock.unlock() }
+        return (adsConsent, limitedDataUse)
+    }
+    
+    /// Set both consent flags in one step
+    func setConsent(adsConsent: Bool, limitedDataUse: Bool) {
+        consentLock.lock()
+        defer { consentLock.unlock() }
+        self.adsConsent = adsConsent
+        self.limitedDataUse = limitedDataUse
     }
     
     /// The advertising ID the app set with setAdvertisingId

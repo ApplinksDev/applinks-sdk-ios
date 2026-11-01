@@ -275,8 +275,7 @@ public class AppLinksSDK: ObservableObject {
     ///   - limitedDataUse: Whether the user opted out of sharing under US
     ///     state privacy laws
     public func updateConsent(adsConsent: Bool, limitedDataUse: Bool = false) {
-        preferences.adsConsent = adsConsent
-        preferences.limitedDataUse = limitedDataUse
+        preferences.setConsent(adsConsent: adsConsent, limitedDataUse: limitedDataUse)
         attributionManager?.trigger()
     }
     

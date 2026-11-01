@@ -275,6 +275,35 @@ final class AttributionManagerTests: XCTestCase {
         XCTAssertNil(preferences.pendingClickId)
     }
 
+    func testConcurrentLookupsRecordOnlyOne() {
+        // The server never answers, so nothing else writes the preferences
+        respond { _ in Stub(status: 503) }
+        let manager = self.manager!
+        let preferences = self.preferences!
+        let url = URL(string: "https://go.acme.test/promo?ck=\(clickId)")
+        for _ in 0..<200 {
+            preferences.installReportDue = true
+            preferences.installLookupCompleted = false
+            preferences.pendingClickId = nil
+
+            // Whether each recorded lookup had found the click ID
+            let lock = NSLock()
+            var recorded: [Bool] = []
+            DispatchQueue.concurrentPerform(iterations: 4) { index in
+                let lookupUrl = index == 0 ? url : nil
+                if manager.recordInstallLookup(url: lookupUrl) {
+                    lock.lock()
+                    recorded.append(lookupUrl != nil)
+                    lock.unlock()
+                }
+            }
+
+            XCTAssertEqual(recorded.count, 1)
+            // The click ID kept is the recorded lookup's: a later nil never replaces it
+            XCTAssertEqual(preferences.pendingClickId, recorded.first == true ? clickId : nil)
+        }
+    }
+
     func testRecordInstallLookupDoesNothingWhenNoReportIsDue() {
         manager.recordInstallLookup(url: URL(string: "https://go.acme.test/promo?ck=\(clickId)"))
 
